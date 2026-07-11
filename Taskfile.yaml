@@ -1,0 +1,47 @@
+version: "3"
+
+tasks:
+  lint:
+    run: once
+    cmd: nubx oxlint src
+    sources:
+      - nub.lock
+      - package.json
+      - tsconfig.json
+      - src/**/*
+
+  typecheck:
+    run: once
+    cmd: nubx tsc
+    sources:
+      - nub.lock
+      - package.json
+      - tsconfig.json
+      - src/**/*
+
+  test:
+    run: once
+    cmd: nubx vitest run
+    sources:
+      - nub.lock
+      - package.json
+      - tsconfig.json
+      - src/**/*
+
+  build:
+    run: once
+    cmd: nubx tsc -p tsconfig.build.json
+    sources:
+      - nub.lock
+      - package.json
+      - tsconfig.json
+      - tsconfig.build.json
+      - src/**/*
+    generates:
+      - dist/**/*
+
+  check:
+    deps:
+      - lint
+      - typecheck
+      - test
