@@ -414,12 +414,16 @@ const virtualEntry = async (
 
   return `
 import { renderStaticSite } from ${JSON.stringify(rendererPath)}
+import { setCollections } from "vite-static-site/runtime"
 ${pageImports}
 ${componentImports}
 
 export default async function generateStaticSite() {
+  const collections = ${serialize(collectionValues)}
+  setCollections(collections)
+
   return renderStaticSite({
-    collections: ${serialize(collectionValues)},
+    collections,
     documentPages: [${pageRecords}],
     dynamicPages: [${dynamicComponentRecords}],
     staticPages: [${staticComponentRecords}],
