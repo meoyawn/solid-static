@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises"
 import { extname, join, relative } from "node:path"
-import { load } from "js-yaml"
+import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
+
+const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
 export interface MarkdownProcessor {
   process(file: { path: string; value: string }): Promise<{
@@ -71,7 +73,7 @@ const parseFrontmatter = (
     throw new TypeError(`${sourceName} requires YAML frontmatter`)
   }
 
-  return { body, data: load(frontmatter) }
+  return { body, data: load(frontmatter, { schema: yamlSchema }) }
 }
 
 const parseSource = (
@@ -85,7 +87,11 @@ const parseSource = (
   }
 
   if (extension === ".yaml" || extension === ".yml") {
-    return { body: "", data: load(source), renderable: false }
+    return {
+      body: "",
+      data: load(source, { schema: yamlSchema }),
+      renderable: false,
+    }
   }
 
   if (extension === ".json") {

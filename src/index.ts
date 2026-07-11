@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import { basename, dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { load } from "js-yaml"
+import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import type { Plugin, PluginOption, ViteDevServer } from "vite"
 import solid from "vite-plugin-solid"
 import {
@@ -11,6 +11,8 @@ import {
   type CollectionDefinitions,
   type MarkdownProcessor,
 } from "./content.ts"
+
+const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
 export interface StaticSiteI18nOptions {
   defaultLocale: string
@@ -173,7 +175,7 @@ const parsePageFrontmatter = (
     throw new TypeError(`${pagePath} requires YAML frontmatter`)
   }
 
-  const frontmatter = load(frontmatterSource)
+  const frontmatter = load(frontmatterSource, { schema: yamlSchema })
 
   if (!isRecord(frontmatter)) {
     throw new TypeError(`${pagePath} requires object frontmatter`)
