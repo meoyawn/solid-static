@@ -26,6 +26,7 @@ tasks:
       - nub.lock
       - package.json
       - tsconfig.json
+      - vitest.config.ts
       - src/**/*
 
   build:

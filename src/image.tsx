@@ -22,7 +22,6 @@ export function ResponsiveImage(props: ResponsiveImageProps): JSX.Element {
   return (
     <img
       {...attributes}
-      data-astro-image="full-width"
       data-vite-static-site-format={format}
       data-vite-static-site-image=""
       data-vite-static-site-sizes={sizes}
