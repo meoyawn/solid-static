@@ -15,6 +15,7 @@ import {
   createHtmlMarkdownProcessor,
   solidMarkdown,
 } from "vite-static-site/markdown";
+import { responsiveImages } from "vite-static-site/responsive-images";
 
 export default defineConfig({
   plugins: [
@@ -25,7 +26,7 @@ export default defineConfig({
         locales: ["en"],
         routing: { prefixDefaultLocale: false },
       },
-      integrations: [solidMarkdown()],
+      integrations: [solidMarkdown(), responsiveImages()],
       markdown: { processor: createHtmlMarkdownProcessor() },
       trailingSlash: "always",
     }),
@@ -34,6 +35,32 @@ export default defineConfig({
 ```
 
 Add `.tsx`, `.md`, or `.mdx` pages under `src/pages`. The directory structure determines each page's route. Markdown pages must declare a SolidJS layout in their frontmatter.
+
+### Responsive images
+
+Import an image through Vite, then render it with `ResponsiveImage` in a SolidJS page or component:
+
+```tsx
+import hero from "../assets/hero.jpg";
+import { ResponsiveImage } from "vite-static-site/image";
+
+export default function Home() {
+  return (
+    <ResponsiveImage
+      src={hero}
+      alt="Mountain landscape"
+      width={1600}
+      height={900}
+      widths={[480, 768, 1200, 1600]}
+      sizes="(max-width: 768px) 100vw, 1200px"
+      format="webp"
+      loading="lazy"
+    />
+  );
+}
+```
+
+The responsive images integration generates the requested variants and adds the resulting `srcset` during development and production builds.
 
 ## Documentation
 
