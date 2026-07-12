@@ -1,4 +1,4 @@
-# vite-static-site
+# solid-static
 
 An Astro-inspired static site implementation built as a Vite plugin with SolidJS and TSX.
 
@@ -10,12 +10,12 @@ Build this project and add it to your app as a local or workspace dependency. Th
 
 ```ts
 import { defineConfig } from "vite";
-import { staticSite } from "vite-static-site";
+import { staticSite } from "solid-static";
 import {
   createHtmlMarkdownProcessor,
   solidMarkdown,
-} from "vite-static-site/markdown";
-import { responsiveImages } from "vite-static-site/responsive-images";
+} from "solid-static/markdown";
+import { responsiveImages } from "solid-static/responsive-images";
 
 export default defineConfig({
   plugins: [
@@ -42,7 +42,7 @@ Import an image through Vite, then render it with `ResponsiveImage` in a SolidJS
 
 ```tsx
 import hero from "../assets/hero.jpg";
-import { ResponsiveImage } from "vite-static-site/image";
+import { ResponsiveImage } from "solid-static/image";
 
 export default function Home() {
   return (
@@ -51,6 +51,7 @@ export default function Home() {
       alt="Mountain landscape"
       width={1600}
       height={900}
+      layout="constrained"
       widths={[480, 768, 1200, 1600]}
       sizes="(max-width: 768px) 100vw, 1200px"
       format="webp"

@@ -11,7 +11,7 @@ import { staticSite } from "./index.ts"
 
 describe("vite static-site development server", () => {
   test("returns an HTTP error when page frontmatter cannot be parsed", async () => {
-    const root = await mkdtemp(join(tmpdir(), "vite-static-site-"))
+    const root = await mkdtemp(join(tmpdir(), "solid-static-"))
 
     try {
       await mkdir(join(root, "src", "pages"), { recursive: true })
@@ -67,7 +67,7 @@ describe("vite static-site development server", () => {
             {
               host: "127.0.0.1",
               method: "GET",
-              path: "/@vite-static-site/routes.json",
+              path: "/@solid-static/routes.json",
               port,
             },
             response => {

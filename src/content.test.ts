@@ -6,7 +6,7 @@ import { loadCollections } from "./content.ts"
 
 describe("content collections", () => {
   test("parses YAML timestamps as dates", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vite-static-site-content-"))
+    const directory = await mkdtemp(join(tmpdir(), "solid-static-content-"))
 
     try {
       await writeFile(

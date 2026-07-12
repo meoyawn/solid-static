@@ -69,9 +69,9 @@ interface StaticSiteEntry {
   imports: string[]
 }
 
-const entryId = "virtual:vite-static-site-entry"
+const entryId = "virtual:solid-static-entry"
 const resolvedEntryId = `\0${entryId}`
-const devRoutesPath = "/@vite-static-site/routes.json"
+const devRoutesPath = "/@solid-static/routes.json"
 const pageExtensions = new Set([".md", ".mdx", ".tsx"])
 const rendererPath = fileURLToPath(
   new URL(import.meta.url.endsWith(".ts") ? "./render.tsx" : "./render.jsx", import.meta.url),
@@ -416,7 +416,7 @@ const virtualEntry = async (
 
   return `
 import { renderStaticSite } from ${JSON.stringify(rendererPath)}
-import { setCollections } from "vite-static-site/runtime"
+import { setCollections } from "solid-static/runtime"
 ${pageImports}
 ${componentImports}
 
@@ -479,7 +479,7 @@ const rewriteDevAssetUrls = (
         return match
       }
 
-      const pathname = new URL(href, "http://vite-static-site.local").pathname
+      const pathname = new URL(href, "http://solid-static.local").pathname
       const extension = extname(pathname)
       const name = basename(pathname, extension)
       const hash = createHash("sha256").update(href).digest("hex").slice(0, 8)
@@ -542,7 +542,7 @@ const serveStaticSite = (
       ...new Set(
         [...server.moduleGraph.idToModuleMap.values()]
           .map(module => module.url)
-          .filter(url => new URL(url, "http://vite-static-site.local").pathname.endsWith(".css")),
+          .filter(url => new URL(url, "http://solid-static.local").pathname.endsWith(".css")),
       ),
     ].sort()
 
@@ -560,7 +560,7 @@ const serveStaticSite = (
         return
       }
 
-      const requestUrl = new URL(request.url, "http://vite-static-site.local")
+      const requestUrl = new URL(request.url, "http://solid-static.local")
       const assetTarget = assets.get(requestUrl.pathname)
 
       if (assetTarget !== undefined) {
@@ -642,7 +642,7 @@ const staticSitePlugin = (unresolved: StaticSiteOptions): Plugin => {
   let invalidateRoutes = (): void => undefined
 
   return {
-    name: "vite-static-site",
+    name: "solid-static",
     configResolved(config) {
       options = resolveOptions(unresolved, config.root)
       validateOptions(options)

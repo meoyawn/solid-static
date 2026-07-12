@@ -3,14 +3,19 @@ import { readFile } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import sharp from "sharp"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
+import {
+  getWidths,
+  type ImageLayout,
+} from "./image-layout.ts"
 
 type ImageFormat = "avif" | "webp"
 
 interface ImageRequest {
   format: ImageFormat
-  sizes: string
+  layout: ImageLayout
   sourceUrl: string
-  widths: number[]
+  width: number
+  widths?: number[]
 }
 
 interface ImageVariant {
@@ -18,6 +23,12 @@ interface ImageVariant {
   height: number
   url: string
   width: number
+}
+
+interface ProcessedImage {
+  defaultVariant: ImageVariant
+  srcSetVariants: ImageVariant[]
+  variants: ImageVariant[]
 }
 
 interface ImageSourceAsset {
@@ -35,42 +46,62 @@ const isImageSourceAsset = (value: unknown): value is ImageSourceAsset =>
   typeof value.fileName === "string" &&
   (typeof value.source === "string" || value.source instanceof Uint8Array)
 
-const imagePattern = /<img(?<attributes>[^>]*\bdata-vite-static-site-image=""[^>]*)>/g
+const imagePattern = /<img(?<attributes>[^>]*\bdata-solid-static-image=""[^>]*)>/g
 
 const findAttribute = (attributes: string, name: string): string | undefined =>
   new RegExp(`\\b${name}="(?<value>[^"]*)"`).exec(attributes)?.groups
     ?.value
 
+const isImageLayout = (value: string | undefined): value is ImageLayout =>
+  value === "constrained" ||
+  value === "fixed" ||
+  value === "full-width" ||
+  value === "none"
+
 const parseImageRequest = (attributes: string): ImageRequest => {
   const sourceUrl = findAttribute(attributes, "src")
-  const format = findAttribute(attributes, "data-vite-static-site-format")
-  const sizes = findAttribute(attributes, "data-vite-static-site-sizes")
-  const widths = findAttribute(attributes, "data-vite-static-site-widths")
+  const format = findAttribute(attributes, "data-solid-static-format")
+  const layout = findAttribute(attributes, "data-solid-static-layout")
+  const widthValue = findAttribute(attributes, "width")
+  const widths = findAttribute(attributes, "data-solid-static-widths")
 
   if (
     sourceUrl === undefined ||
-    sizes === undefined ||
-    widths === undefined ||
+    !isImageLayout(layout) ||
+    widthValue === undefined ||
     (format !== "avif" && format !== "webp")
   ) {
     throw new TypeError("Responsive image is missing required metadata")
   }
 
-  return {
-    format,
-    sizes,
-    sourceUrl,
-    widths: widths.split(",").map(width => Number.parseInt(width, 10)),
+  const width = Number.parseInt(widthValue, 10)
+
+  if (!Number.isInteger(width) || width <= 0) {
+    throw new TypeError("Responsive image width must be a positive integer")
   }
+
+  const request: ImageRequest = {
+    format,
+    layout,
+    sourceUrl,
+    width,
+  }
+
+  if (widths !== undefined) {
+    request.widths = widths
+      .split(",")
+      .map(candidate => Number.parseInt(candidate, 10))
+  }
+
+  return request
 }
 
-const variantsFor = async (
+const processImage = async (
   source: Uint8Array,
   sourceName: string,
-  format: ImageFormat,
-  widths: readonly number[],
+  request: ImageRequest,
   urlFor: (name: string) => string,
-): Promise<ImageVariant[]> => {
+): Promise<ProcessedImage> => {
   const metadata = await sharp(source).metadata()
   const originalWidth = metadata.width
   const originalHeight = metadata.height
@@ -81,22 +112,30 @@ const variantsFor = async (
 
   const baseName = basename(sourceName, extname(sourceName))
   const sourceHash = createHash("sha256").update(source).digest("hex").slice(0, 8)
-  const requestedWidths = [...new Set(widths)]
+  const defaultWidth = Math.min(request.width, originalWidth)
+  const srcSetWidths = [
+    ...new Set(
+      request.widths ??
+        getWidths({
+          layout: request.layout,
+          originalWidth,
+          width: request.width,
+        }),
+    ),
+  ]
     .filter(width => Number.isInteger(width) && width > 0)
     .filter(width => width <= originalWidth)
     .sort((left, right) => left - right)
-
-  if (requestedWidths.length === 0) {
-    throw new TypeError(`${sourceName} has no usable responsive widths`)
-  }
-
-  return Promise.all(
-    requestedWidths.map(async width => {
+  const outputWidths = [...new Set([defaultWidth, ...srcSetWidths])].sort(
+    (left, right) => left - right,
+  )
+  const variants = await Promise.all(
+    outputWidths.map(async width => {
       const height = Math.round((originalHeight / originalWidth) * width)
-      const name = `${baseName}-${sourceHash}-${width}.${format}`
+      const name = `${baseName}-${sourceHash}-${width}.${request.format}`
       const transformer = sharp(source).resize({ height, width })
       const content =
-        format === "avif"
+        request.format === "avif"
           ? await transformer.avif().toBuffer()
           : await transformer.webp().toBuffer()
 
@@ -108,30 +147,50 @@ const variantsFor = async (
       }
     }),
   )
+  const variantsByWidth = new Map(
+    variants.map(variant => [variant.width, variant]),
+  )
+  const defaultVariant = variantsByWidth.get(defaultWidth)
+
+  if (defaultVariant === undefined) {
+    throw new TypeError(`Responsive image ${sourceName} has no default variant`)
+  }
+
+  const srcSetVariants: ImageVariant[] = []
+
+  for (const width of srcSetWidths) {
+    const variant = variantsByWidth.get(width)
+
+    if (variant === undefined) {
+      throw new TypeError(`Responsive image ${sourceName} is missing ${width}px`)
+    }
+
+    srcSetVariants.push(variant)
+  }
+
+  return { defaultVariant, srcSetVariants, variants }
 }
 
 const renderImage = (
   attributes: string,
-  request: ImageRequest,
-  variants: readonly ImageVariant[],
+  image: ProcessedImage,
 ): string => {
-  const defaultVariant = variants.at(-1)
-
-  if (defaultVariant === undefined) {
-    throw new TypeError(`Responsive image ${request.sourceUrl} has no variants`)
-  }
-
   const outputAttributes = attributes
-    .replace(/\sdata-vite-static-site-(?:image|widths|format|sizes)="[^"]*"/g, "")
-    .replace(/\bsrc="[^"]*"/, `src="${defaultVariant.url}"`)
+    .replace(/\sdata-solid-static-(?:image|widths|format|layout|sizes)="[^"]*"/g, "")
+    .replace(/\s+srcset="[^"]*"/g, "")
+    .replace(/\bsrc="[^"]*"/, `src="${image.defaultVariant.url}"`)
     .replace(/\s*\/$/, "")
+  const srcSet = image.srcSetVariants
+    .map(variant => `${variant.url} ${variant.width}w`)
+    .join(", ")
+  const srcSetAttribute = srcSet === "" ? "" : ` srcset="${srcSet}"`
 
-  return `<img${outputAttributes} srcset="${variants.map(variant => `${variant.url} ${variant.width}w`).join(", ")}">`
+  return `<img${outputAttributes}${srcSetAttribute}>`
 }
 
 const replaceImages = async (
   html: string,
-  variants: (request: ImageRequest) => Promise<ImageVariant[]>,
+  process: (request: ImageRequest) => Promise<ProcessedImage>,
 ): Promise<string> => {
   const matches = [...html.matchAll(imagePattern)]
   const replacements = await Promise.all(
@@ -143,7 +202,7 @@ const replaceImages = async (
       }
 
       const request = parseImageRequest(attributes)
-      return renderImage(attributes, request, await variants(request))
+      return renderImage(attributes, await process(request))
     }),
   )
 
@@ -174,7 +233,7 @@ const sourceBytes = (asset: ImageSourceAsset): Uint8Array =>
     : Buffer.from(asset.source)
 
 const devSourcePath = (config: ResolvedConfig, sourceUrl: string): string => {
-  const pathname = new URL(sourceUrl, "http://vite-static-site.local").pathname
+  const pathname = new URL(sourceUrl, "http://solid-static.local").pathname
 
   if (!pathname.startsWith("/src/")) {
     throw new TypeError(`Unsupported responsive dev image ${sourceUrl}`)
@@ -189,7 +248,7 @@ export const responsiveImages = (): Plugin => {
   const devAssets = new Map<string, Uint8Array>()
 
   return {
-    name: "vite-static-site-responsive-images",
+    name: "solid-static-responsive-images",
     configResolved(resolved) {
       config = resolved
     },
@@ -202,7 +261,7 @@ export const responsiveImages = (): Plugin => {
       ) {
         const pathname = new URL(
           request.url ?? "/",
-          "http://vite-static-site.local",
+          "http://solid-static.local",
         ).pathname
         const content = devAssets.get(pathname)
 
@@ -224,9 +283,9 @@ export const responsiveImages = (): Plugin => {
         return html
       }
 
-      const cache = new Map<string, Promise<ImageVariant[]>>()
+      const cache = new Map<string, Promise<ProcessedImage>>()
       return replaceImages(html, request => {
-        const key = `${request.sourceUrl}:${request.format}:${request.widths.join(",")}`
+        const key = `${request.sourceUrl}:${request.format}:${request.layout}:${request.width}:${request.widths?.join(",") ?? "auto"}`
         const cached = cache.get(key)
 
         if (cached !== undefined) {
@@ -235,17 +294,16 @@ export const responsiveImages = (): Plugin => {
 
         const operation = readFile(devSourcePath(config, request.sourceUrl)).then(
           source =>
-            variantsFor(
+            processImage(
               source,
               request.sourceUrl,
-              request.format,
-              request.widths,
-              name => `/@vite-static-site/images/${name}`,
-            ).then(variants => {
-              for (const variant of variants) {
+              request,
+              name => `/@solid-static/images/${name}`,
+            ).then(image => {
+              for (const variant of image.variants) {
                 devAssets.set(variant.url, variant.content)
               }
-              return variants
+              return image
             }),
         )
         cache.set(key, operation)
@@ -253,7 +311,7 @@ export const responsiveImages = (): Plugin => {
       })
     },
     async generateBundle(_outputOptions, bundle) {
-      const cache = new Map<string, Promise<ImageVariant[]>>()
+      const cache = new Map<string, Promise<ProcessedImage>>()
       const transformedSourceFiles = new Set<string>()
 
       for (const output of Object.values(bundle)) {
@@ -264,18 +322,17 @@ export const responsiveImages = (): Plugin => {
         output.source = await replaceImages(output.source.toString(), request => {
           const asset = sourceAsset(bundle, request.sourceUrl)
           transformedSourceFiles.add(asset.fileName)
-          const key = `${asset.fileName}:${request.format}:${request.widths.join(",")}`
+          const key = `${asset.fileName}:${request.format}:${request.layout}:${request.width}:${request.widths?.join(",") ?? "auto"}`
           const cached = cache.get(key)
 
           if (cached !== undefined) {
             return cached
           }
 
-          const operation = variantsFor(
+          const operation = processImage(
             sourceBytes(asset),
             asset.fileName,
-            request.format,
-            request.widths,
+            request,
             name => `/assets/${name}`,
           )
           cache.set(key, operation)
@@ -283,8 +340,8 @@ export const responsiveImages = (): Plugin => {
         })
       }
 
-      for (const variants of cache.values()) {
-        for (const variant of await variants) {
+      for (const operation of cache.values()) {
+        for (const variant of (await operation).variants) {
           this.emitFile({
             fileName: variant.url.replace(/^\//, ""),
             source: variant.content,
