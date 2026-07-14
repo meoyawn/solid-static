@@ -2,7 +2,11 @@
 
 An Astro-inspired static site implementation built as a Vite plugin with SolidJS and TSX.
 
-This project is under development and is not published as an npm package yet.
+Install from npm:
+
+```sh
+nub add solid-static
+```
 
 ## Setup
 

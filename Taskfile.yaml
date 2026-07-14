@@ -46,3 +46,9 @@ tasks:
       - lint
       - typecheck
       - test
+
+  publish:
+    deps:
+      - check
+      - build
+    cmd: nub publish --access public
