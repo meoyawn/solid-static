@@ -16,11 +16,31 @@ describe("PageRoute Vite rendering", () => {
   test.each(["always", "never"] as const)(
     "keeps development and production route props identical with trailingSlash %s",
     async trailingSlash => {
+      expect({
+        document: typeof document,
+        Element: typeof Element,
+      }).toEqual({ document: "undefined", Element: "undefined" })
+
       const root = await mkdtemp(join(process.cwd(), ".solid-static-routes-"))
       const pagesDirectory = join(root, "src", "pages")
       const routeComponent = `
 export default (props: { route: { fileName: string; path: string } }) =>
   <output>{props.route.path}|{props.route.fileName}</output>
+`
+      const layoutComponent = `
+import type { JSX } from "solid-js"
+
+export default (props: {
+  children: JSX.Element
+  route: { fileName: string; path: string }
+}) => (
+  <html>
+    <body>
+      <output>{props.route.path}|{props.route.fileName}</output>
+      <main>{props.children}</main>
+    </body>
+  </html>
+)
 `
 
       function plugins() {
@@ -99,11 +119,11 @@ export default (props: { route: { fileName: string; path: string } }) =>
           ),
           writeFile(
             join(pagesDirectory, "reference.md"),
-            "---\nlayout: ../layouts/document.tsx\n---\n\nReference\n",
+            "---\nlayout: ../layouts/document.tsx\n---\n\n# SSR-safe Markdown\n\nRendered in **Node production SSR**.\n",
           ),
           writeFile(
             join(root, "src", "layouts", "document.tsx"),
-            routeComponent,
+            layoutComponent,
           ),
         ])
 
@@ -141,8 +161,22 @@ export default (props: { route: { fileName: string; path: string } }) =>
             renderedRoute(await readFile(join(root, "dist", fileName), "utf8")),
           ]),
         )
+        const referenceFileName =
+          trailingSlash === "always"
+            ? "reference/index.html"
+            : "reference.html"
+        const referenceHtml = await readFile(
+          join(root, "dist", referenceFileName),
+          "utf8",
+        )
 
         expect(productionRoutes).toEqual(expected)
+        expect(referenceHtml).toMatch(
+          /<h1[^>]*>SSR-safe Markdown<\/h1>/,
+        )
+        expect(referenceHtml).toMatch(
+          /<p[^>]*>Rendered in <strong[^>]*>Node production SSR<\/strong>\.<\/p>/,
+        )
 
         const viteServer = await createViteServer({
           appType: "spa",

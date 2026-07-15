@@ -1,6 +1,6 @@
 {
   "name": "solid-static",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "dist"
@@ -48,6 +48,7 @@
     "remark-mdx-frontmatter": "^5.2.0",
     "remark-rehype": "^11.1.2",
     "sharp": "^0.35.3",
+    "solid-jsx": "^1.1.4",
     "unified": "11.0.5",
     "vite-plugin-solid": "^2.11.12"
   },

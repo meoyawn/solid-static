@@ -7,6 +7,10 @@
 - use `nub` as package manager
 - use `nubx` to run binaries
 
+## Verification
+
+- after significant changes run `task check`
+
 ## Releases
 
 - agent can do `task publish` if human asks for it explicitly. Verbs: "publish"/"release"

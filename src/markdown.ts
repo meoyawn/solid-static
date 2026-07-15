@@ -25,7 +25,7 @@ export const createHtmlMarkdownProcessor = () =>
 
 export const solidMarkdown = (): PluginOption =>
   mdx({
-    jsxImportSource: "solid-js/h",
+    jsxImportSource: "solid-jsx",
     remarkPlugins: [
       remarkFrontmatter,
       [remarkMdxFrontmatter, { name: "frontmatter" }],

@@ -32,6 +32,9 @@ importers:
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@26.1.1)
+      solid-jsx:
+        specifier: ^1.1.4
+        version: 1.1.4(solid-js@1.9.14)
       unified:
         specifier: 11.0.5
         version: 11.0.5
@@ -1517,6 +1520,12 @@ packages:
 
   solid-js@1.9.14:
     resolution: {integrity: sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==}
+
+  solid-jsx@1.1.4:
+    resolution: {integrity: sha512-A4E9cB+wZpHZrXzv3+OWr6zaGS0FjD/UAKqbI38R1JwogjlBXdSGC2PgaIMisnGYKL3oJ55FPLv4QRkENmdbWQ==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      solid-js: '>=1.4.0'
 
   solid-refresh@0.6.3:
     resolution: {integrity: sha512-F3aPsX6hVw9ttm5LYlth8Q15x6MlI/J3Dn+o3EQyRTtTxidepSTwAYdozt01/YA+7ObcciagGEyXIopGZzQtbA==}
@@ -3288,6 +3297,10 @@ snapshots:
       csstype: 3.2.3
       seroval: 1.5.5
       seroval-plugins: 1.5.5(seroval@1.5.5)
+
+  solid-jsx@1.1.4(solid-js@1.9.14):
+    dependencies:
+      solid-js: 1.9.14
 
   solid-refresh@0.6.3(solid-js@1.9.14):
     dependencies:
