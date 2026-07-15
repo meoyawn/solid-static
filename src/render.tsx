@@ -4,7 +4,9 @@ import type { LoadedCollections } from "./content.ts"
 import { setCollections } from "./runtime.ts"
 
 export interface PageRoute {
+  /** Output-relative file name generated for the page. */
   fileName: string
+  /** Absolute public URL pathname without query or hash. Root is `/`; a custom 404 is `/404`; other routes use the configured trailing-slash policy. */
   path: string
 }
 
@@ -34,7 +36,7 @@ interface DocumentPage {
 interface StaticPage {
   Content: Component<Record<string, unknown>>
   fileName: string
-  path: string
+  routePath: string
   props: Record<string, unknown>
 }
 
@@ -114,6 +116,22 @@ const routeFileName = (
     : `${normalized}.html`
 }
 
+const publicPathFor = (
+  routePath: string,
+  trailingSlash: RenderStaticSiteInput["trailingSlash"],
+): string => {
+  const normalized = routePath
+    .replace(/[?#].*$/, "")
+    .replace(/^\/+|\/+$/g, "")
+  const pathname = normalized === "" ? "/" : `/${normalized}`
+
+  if (pathname === "/" || pathname === "/404" || trailingSlash === "never") {
+    return pathname
+  }
+
+  return `${pathname}/`
+}
+
 const requireStaticPaths = (value: unknown, pattern: string): StaticPath[] => {
   if (!Array.isArray(value)) {
     throw new TypeError(`${pattern} getStaticPaths() must return an array`)
@@ -160,7 +178,10 @@ export const renderStaticSite = async (
         renderToString(() => (
           <Layout
             frontmatter={page.frontmatter}
-            route={{ fileName: page.fileName, path: page.routePath }}
+            route={{
+              fileName: page.fileName,
+              path: publicPathFor(page.routePath, input.trailingSlash),
+            }}
           >
             <Content />
           </Layout>
@@ -174,7 +195,10 @@ export const renderStaticSite = async (
       renderToString(() =>
         page.Content({
           ...page.props,
-          route: { fileName: page.fileName, path: page.path },
+          route: {
+            fileName: page.fileName,
+            path: publicPathFor(page.routePath, input.trailingSlash),
+          },
         }),
       ),
     ),
@@ -201,7 +225,10 @@ export const renderStaticSite = async (
               renderToString(() =>
                 page.Content({
                   ...path.props,
-                  route: { fileName, path: routePath },
+                  route: {
+                    fileName,
+                    path: publicPathFor(routePath, input.trailingSlash),
+                  },
                 }),
               ),
             ),

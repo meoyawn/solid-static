@@ -398,7 +398,7 @@ const virtualEntry = async (
   const staticComponentRecords = staticComponentPages
     .map(
       ({ index, page }) =>
-        `{ Content: ComponentPage${index}.default, fileName: ${JSON.stringify(page.fileName)}, path: ${JSON.stringify(page.routePath)}, props: {} }`,
+        `{ Content: ComponentPage${index}.default, fileName: ${JSON.stringify(page.fileName)}, routePath: ${JSON.stringify(page.routePath)}, props: {} }`,
     )
     .join(",\n")
   const dynamicComponentRecords = dynamicComponentPages

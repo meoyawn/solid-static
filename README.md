@@ -40,6 +40,20 @@ export default defineConfig({
 
 Add `.tsx`, `.md`, or `.mdx` pages under `src/pages`. The directory structure determines each page's route. Markdown pages must declare a SolidJS layout in their frontmatter.
 
+### Page routes
+
+Page components and Markdown or MDX layouts receive a `route` prop. `route.path` is the page's absolute public URL pathname. It never contains a query or hash and never exposes an internal route ID or output file name. Dynamic parameters are expanded before the pathname is normalized.
+
+| Page | `trailingSlash: "always"` | `trailingSlash: "never"` |
+| --- | --- | --- |
+| Root | `/` | `/` |
+| Static TSX `guides.tsx` | `/guides/` | `/guides` |
+| Markdown or MDX `guides.md` | `/guides/` | `/guides` |
+| Dynamic `guides/[slug].tsx`, slug `example` | `/guides/example/` | `/guides/example` |
+| Custom `404.tsx` | `/404` | `/404` |
+
+`route.fileName` remains output-relative: for example, `guides/index.html` in `"always"` mode and `guides.html` in `"never"` mode. A custom 404 is always emitted as `404.html`, while its route identity remains `/404`. When the development server uses that page to answer a missing URL, `route.path` remains `/404`; it does not represent the original request pathname.
+
 ### Responsive images
 
 Import an image through Vite, then render it with `ResponsiveImage` in a SolidJS page or component:
