@@ -11,6 +11,11 @@ import {
   type CollectionDefinitions,
   type MarkdownProcessor,
 } from "./content.ts"
+import {
+  createClientIslands,
+  type ClientIslandBundle,
+  type ClientIslands,
+} from "./client-islands.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -137,6 +142,27 @@ const withStyleSheets = (
   }
 
   return html.replace("</head>", `${links}</head>`)
+}
+
+const withClientIslands = (
+  html: string,
+  bundle: ClientIslandBundle,
+): string => {
+  const entries = [...bundle.entryUrls].filter(([placeholder]) =>
+    html.includes(placeholder),
+  )
+
+  if (entries.length === 0) {
+    return html
+  }
+
+  let transformed = html
+
+  for (const [placeholder, url] of entries) {
+    transformed = transformed.replaceAll(placeholder, url)
+  }
+
+  return withStyleSheets(transformed, bundle.styleUrls)
 }
 
 const resolveOptions = (
@@ -637,7 +663,10 @@ const serveStaticSite = (
   return invalidateRoutes
 }
 
-const staticSitePlugin = (unresolved: StaticSiteOptions): Plugin => {
+const staticSitePlugin = (
+  unresolved: StaticSiteOptions,
+  clientIslands: ClientIslands,
+): Plugin => {
   let options = resolveOptions(unresolved, process.cwd())
   let invalidateRoutes = (): void => undefined
 
@@ -698,6 +727,7 @@ const staticSitePlugin = (unresolved: StaticSiteOptions): Plugin => {
       }
 
       const routes = requireRoutes(await generatedModule.default())
+      const clientBundle = await clientIslands.buildBundle()
       const styleSheets = Object.values(bundle)
         .filter(
           output =>
@@ -712,19 +742,35 @@ const staticSitePlugin = (unresolved: StaticSiteOptions): Plugin => {
         }
       }
 
+      for (const output of clientBundle.outputs) {
+        this.emitFile({
+          type: "asset",
+          fileName: output.fileName,
+          source: output.source,
+        })
+      }
+
       for (const route of routes) {
         this.emitFile({
           type: "asset",
           fileName: route.fileName,
-          source: withStyleSheets(route.html, styleSheets),
+          source: withClientIslands(
+            withStyleSheets(route.html, styleSheets),
+            clientBundle,
+          ),
         })
       }
     },
   }
 }
 
-export const staticSite = (options: StaticSiteOptions): PluginOption => [
-  ...options.integrations,
-  solid({ ssr: true }),
-  staticSitePlugin(options),
-]
+export const staticSite = (options: StaticSiteOptions): PluginOption => {
+  const clientIslands = createClientIslands()
+
+  return [
+    ...options.integrations,
+    clientIslands.plugin,
+    solid({ ssr: true }),
+    staticSitePlugin(options, clientIslands),
+  ]
+}

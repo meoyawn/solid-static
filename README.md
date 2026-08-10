@@ -40,6 +40,44 @@ export default defineConfig({
 
 Add `.tsx`, `.md`, or `.mdx` pages under `src/pages`. The directory structure determines each page's route. Markdown pages must declare a SolidJS layout in their frontmatter.
 
+### Client islands
+
+Import a self-mounting browser entry with the `?island` query, then reference the returned URL from a module script. The page remains static HTML; only the named entry and its imports are compiled for the browser.
+
+```tsx
+import counterIsland from "../app/counter-island.tsx?island";
+
+export default () => (
+  <html>
+    <body>
+      <div id="counter">0</div>
+      <script type="module" src={counterIsland} />
+    </body>
+  </html>
+);
+```
+
+```tsx
+import { createSignal } from "solid-js";
+import { render } from "solid-js/web";
+
+const Counter = () => {
+  const [count, setCount] = createSignal(0);
+
+  return <button onClick={() => setCount(value => value + 1)}>{count()}</button>;
+};
+
+const root = document.querySelector("#counter");
+
+if (!(root instanceof HTMLElement)) {
+  throw new TypeError("Missing #counter island root");
+}
+
+render(() => <Counter />, root);
+```
+
+Vite serves the source entry during development. Production builds emit hashed JavaScript and CSS assets and rewrite only pages that reference the island.
+
 ### Page routes
 
 Page components and Markdown or MDX layouts receive a `route` prop. `route.path` is the page's absolute public URL pathname. It never contains a query or hash and never exposes an internal route ID or output file name. Dynamic parameters are expanded before the pathname is normalized.

@@ -3,11 +3,13 @@ version: "3"
 tasks:
   lint:
     run: once
-    cmd: nubx oxlint src
+    cmd: nubx oxlint src e2e playwright.config.ts
     sources:
       - nub.lock
       - package.json
+      - playwright.config.ts
       - tsconfig.json
+      - e2e/**/*
       - src/**/*
 
   typecheck:
@@ -19,7 +21,18 @@ tasks:
       - tsconfig.json
       - src/**/*
 
-  test:
+  typecheck:playwright:
+    run: once
+    cmd: nubx tsc -p tsconfig.playwright.json
+    sources:
+      - e2e/**/*
+      - nub.lock
+      - package.json
+      - playwright.config.ts
+      - tsconfig.json
+      - tsconfig.playwright.json
+
+  test:unit:
     run: once
     cmd: nubx vitest run
     sources:
@@ -28,6 +41,29 @@ tasks:
       - tsconfig.json
       - vitest.config.ts
       - src/**/*
+
+  playwright:install:
+    run: once
+    cmd: nubx playwright install chromium
+    sources:
+      - nub.lock
+
+  test:playwright:
+    run: once
+    deps:
+      - playwright:install
+    cmd: nubx playwright test
+    sources:
+      - e2e/**/*
+      - nub.lock
+      - package.json
+      - playwright.config.ts
+      - src/**/*
+
+  test:
+    deps:
+      - test:unit
+      - test:playwright
 
   build:
     run: once
@@ -45,6 +81,7 @@ tasks:
     deps:
       - lint
       - typecheck
+      - typecheck:playwright
       - test
 
   publish:
