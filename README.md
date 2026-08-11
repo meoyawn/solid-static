@@ -78,6 +78,22 @@ render(() => <Counter />, root);
 
 Vite serves the source entry during development. Production builds emit hashed JavaScript and CSS assets and rewrite only pages that reference the island.
 
+Use `client` to configure the clean nested browser build explicitly. It accepts
+Vite configuration such as aliases, defines, mode, CSS options, browser-only
+plugins, and build target or minification settings. Server integrations are not
+forwarded automatically.
+
+```ts
+staticSite({
+  client: {
+    build: { minify: false, target: "es2020" },
+    define: { __BROWSER__: "true" },
+    resolve: { alias: { "@client": "/src/client" } },
+  },
+  // Other static-site options.
+});
+```
+
 ### Page routes
 
 Page components and Markdown or MDX layouts receive a `route` prop. `route.path` is the page's absolute public URL pathname. It never contains a query or hash and never exposes an internal route ID or output file name. Dynamic parameters are expanded before the pathname is normalized.

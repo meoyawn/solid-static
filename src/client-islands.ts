@@ -3,8 +3,10 @@ import { isAbsolute, relative } from "node:path"
 import {
   build,
   normalizePath,
+  type Manifest,
   type Plugin,
   type ResolvedConfig,
+  type UserConfig,
 } from "vite"
 import solid from "vite-plugin-solid"
 
@@ -34,9 +36,10 @@ export interface ClientIslandOutput {
 }
 
 export interface ClientIslandBundle {
-  entryUrls: Map<string, string>
+  base: string
+  entryFiles: Map<string, string>
   outputs: ClientIslandOutput[]
-  styleUrls: string[]
+  styleFilesByEntry: Map<string, string[]>
 }
 
 export interface ClientIslands {
@@ -47,6 +50,7 @@ export interface ClientIslands {
 const islandQuery = "?island"
 const resolvedIslandPrefix = "\0solid-static-island:"
 const placeholderPrefix = "__SOLID_STATIC_ISLAND_"
+const manifestFileName = ".vite/solid-static-islands-manifest.json"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -105,9 +109,69 @@ const requireClientOutputs = (
   return outputs
 }
 
-const publicAssetUrl = (base: string, fileName: string): string => {
-  const normalizedBase = base.endsWith("/") ? base : `${base}/`
-  return `${normalizedBase}${fileName}`
+const requireClientManifest = (
+  outputs: (ClientAssetOutput | ClientChunkOutput)[],
+): Manifest => {
+  const output = outputs.find(
+    candidate =>
+      candidate.type === "asset" && candidate.fileName === manifestFileName,
+  )
+
+  if (output?.type !== "asset") {
+    throw new TypeError("Vite did not emit a client island manifest")
+  }
+
+  const source =
+    typeof output.source === "string"
+      ? output.source
+      : new TextDecoder().decode(output.source)
+  const manifest: unknown = JSON.parse(source)
+
+  if (!isRecord(manifest)) {
+    throw new TypeError("Vite emitted an invalid client island manifest")
+  }
+
+  return manifest as Manifest
+}
+
+const manifestStyleFiles = (
+  manifest: Manifest,
+  entryFileName: string,
+): string[] => {
+  const entry = Object.values(manifest).find(
+    chunk => chunk.isEntry === true && chunk.file === entryFileName,
+  )
+
+  if (entry === undefined) {
+    throw new TypeError(`Client island manifest has no entry ${entryFileName}`)
+  }
+
+  const styleFiles = new Set<string>()
+  const visited = new Set<string>()
+
+  function visit(chunk: Manifest[string]): void {
+    for (const fileName of chunk.css ?? []) {
+      styleFiles.add(fileName)
+    }
+
+    for (const key of chunk.imports ?? []) {
+      if (visited.has(key)) {
+        continue
+      }
+
+      const imported = manifest[key]
+
+      if (imported === undefined) {
+        throw new TypeError(`Client island manifest has no import ${key}`)
+      }
+
+      visited.add(key)
+      visit(imported)
+    }
+  }
+
+  visit(entry)
+  return [...styleFiles].sort()
 }
 
 const developmentModuleUrl = (
@@ -123,8 +187,9 @@ const developmentModuleUrl = (
   return `/@fs/${normalizePath(entryPath)}`
 }
 
-export const createClientIslands = (): ClientIslands => {
+export const createClientIslands = (clientConfig: UserConfig = {}): ClientIslands => {
   const entries = new Map<string, RegisteredIsland>()
+  let configuredBase: string | undefined
   let clientMinify: ResolvedConfig["build"]["minify"] = "oxc"
   let config: ResolvedConfig | undefined
 
@@ -132,6 +197,7 @@ export const createClientIslands = (): ClientIslands => {
     name: "solid-static-client-islands",
     enforce: "pre",
     config(userConfig) {
+      configuredBase = userConfig.base
       clientMinify = userConfig.build?.minify ?? "oxc"
     },
     configResolved(resolvedConfig) {
@@ -188,27 +254,35 @@ export const createClientIslands = (): ClientIslands => {
     }
 
     const resolvedConfig = config
+    const clientBase = clientConfig.base ?? configuredBase ?? resolvedConfig.base
 
     if (entries.size === 0) {
       return {
-        entryUrls: new Map(),
+        base: clientBase,
+        entryFiles: new Map(),
         outputs: [],
-        styleUrls: [],
+        styleFilesByEntry: new Map(),
       }
     }
 
+    const clientBuild = clientConfig.build ?? {}
     const result: unknown = await build({
-      base: resolvedConfig.base,
+      ...clientConfig,
+      base: clientBase,
       configFile: false,
-      logLevel: resolvedConfig.logLevel ?? "info",
+      logLevel: clientConfig.logLevel ?? resolvedConfig.logLevel ?? "info",
+      mode: clientConfig.mode ?? resolvedConfig.mode,
       publicDir: false,
       root: resolvedConfig.root,
-      plugins: [solid({ ssr: true })],
+      plugins: [clientConfig.plugins, solid()],
       build: {
-        cssCodeSplit: false,
+        ...clientBuild,
+        cssCodeSplit: true,
         emptyOutDir: false,
-        minify: clientMinify,
+        manifest: manifestFileName,
+        minify: clientBuild.minify ?? clientMinify,
         rolldownOptions: {
+          ...clientBuild.rolldownOptions,
           input: Object.fromEntries(
             [...entries].map(([key, island]) => [key, island.entryPath]),
           ),
@@ -218,12 +292,14 @@ export const createClientIslands = (): ClientIslands => {
             entryFileNames: "assets/islands/[name]-[hash].js",
           },
         },
-        sourcemap: resolvedConfig.build.sourcemap,
+        sourcemap: clientBuild.sourcemap ?? resolvedConfig.build.sourcemap,
         write: false,
       },
     })
     const builtOutputs = requireClientOutputs(result)
-    const entryUrls = new Map<string, string>()
+    const manifest = requireClientManifest(builtOutputs)
+    const entryFiles = new Map<string, string>()
+    const styleFilesByEntry = new Map<string, string[]>()
 
     for (const output of builtOutputs) {
       if (output.type !== "chunk" || !output.isEntry) {
@@ -236,28 +312,27 @@ export const createClientIslands = (): ClientIslands => {
         throw new TypeError(`Vite emitted unknown client island ${output.name}`)
       }
 
-      entryUrls.set(
+      entryFiles.set(island.placeholder, output.fileName)
+      styleFilesByEntry.set(
         island.placeholder,
-        publicAssetUrl(resolvedConfig.base, output.fileName),
+        manifestStyleFiles(manifest, output.fileName),
       )
     }
 
-    if (entryUrls.size !== entries.size) {
+    if (entryFiles.size !== entries.size) {
       throw new TypeError("Vite did not emit every client island entry")
     }
 
     return {
-      entryUrls,
-      outputs: builtOutputs.map(output => ({
-        fileName: output.fileName,
-        source: output.type === "chunk" ? output.code : output.source,
-      })),
-      styleUrls: builtOutputs
-        .filter(
-          (output): output is ClientAssetOutput =>
-            output.type === "asset" && output.fileName.endsWith(".css"),
-        )
-        .map(output => publicAssetUrl(resolvedConfig.base, output.fileName)),
+      base: clientBase,
+      entryFiles,
+      outputs: builtOutputs
+        .filter(output => output.fileName !== manifestFileName)
+        .map(output => ({
+          fileName: output.fileName,
+          source: output.type === "chunk" ? output.code : output.source,
+        })),
+      styleFilesByEntry,
     }
   }
 

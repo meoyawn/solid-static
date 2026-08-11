@@ -4,7 +4,13 @@ import { readdir, readFile } from "node:fs/promises"
 import { basename, dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
-import type { Plugin, PluginOption, ViteDevServer } from "vite"
+import {
+  normalizePath,
+  type Plugin,
+  type PluginOption,
+  type UserConfig,
+  type ViteDevServer,
+} from "vite"
 import solid from "vite-plugin-solid"
 import {
   loadCollections,
@@ -28,6 +34,7 @@ export interface StaticSiteI18nOptions {
 }
 
 export interface StaticSiteOptions {
+  client?: UserConfig
   collections: CollectionDefinitions
   i18n: StaticSiteI18nOptions
   integrations: PluginOption[]
@@ -131,14 +138,8 @@ const withStyleSheets = (
   }
 
   const links = styleSheets
-    .filter(fileName => {
-      const href = fileName.startsWith("/") ? fileName : `/${fileName}`
-      return !html.includes(`href="${href}"`)
-    })
-    .map(fileName => {
-      const href = fileName.startsWith("/") ? fileName : `/${fileName}`
-      return `<link rel="stylesheet" href="${href}">`
-    })
+    .filter(href => !html.includes(`href="${href}"`))
+    .map(href => `<link rel="stylesheet" href="${href}">`)
     .join("")
 
   if (!html.includes("</head>")) {
@@ -151,8 +152,9 @@ const withStyleSheets = (
 const withClientIslands = (
   html: string,
   bundle: ClientIslandBundle,
+  routeFileName: string,
 ): string => {
-  const entries = [...bundle.entryUrls].filter(([placeholder]) =>
+  const entries = [...bundle.entryFiles].filter(([placeholder]) =>
     html.includes(placeholder),
   )
 
@@ -162,11 +164,40 @@ const withClientIslands = (
 
   let transformed = html
 
-  for (const [placeholder, url] of entries) {
-    transformed = transformed.replaceAll(placeholder, url)
+  for (const [placeholder, fileName] of entries) {
+    transformed = transformed.replaceAll(
+      placeholder,
+      publicAssetUrl(bundle.base, fileName, routeFileName),
+    )
   }
 
-  return withStyleSheets(transformed, bundle.styleUrls)
+  const styleUrls = [
+    ...new Set(
+      entries.flatMap(([placeholder]) =>
+        (bundle.styleFilesByEntry.get(placeholder) ?? []).map(fileName =>
+          publicAssetUrl(bundle.base, fileName, routeFileName),
+        ),
+      ),
+    ),
+  ]
+
+  return withStyleSheets(transformed, styleUrls)
+}
+
+const publicAssetUrl = (
+  base: string,
+  fileName: string,
+  routeFileName: string,
+): string => {
+  if (base === "" || base.startsWith(".")) {
+    const relativeFileName = relative(dirname(routeFileName), fileName)
+    return relativeFileName.startsWith(".")
+      ? normalizePath(relativeFileName)
+      : `./${normalizePath(relativeFileName)}`
+  }
+
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`
+  return `${normalizedBase}${fileName}`
 }
 
 const resolveOptions = (
@@ -673,14 +704,19 @@ const staticSitePlugin = (
 ): Plugin => {
   let options = resolveOptions(unresolved, process.cwd())
   let invalidateRoutes = (): void => undefined
+  let configuredBase: string | undefined
+  let publicBase = "/"
 
   return {
     name: "solid-static",
     configResolved(config) {
       options = resolveOptions(unresolved, config.root)
+      publicBase = configuredBase ?? config.base
       validateOptions(options)
     },
-    config(_config, environment) {
+    config(userConfig, environment) {
+      configuredBase = userConfig.base
+
       if (environment.command === "serve") {
         return undefined
       }
@@ -759,8 +795,14 @@ const staticSitePlugin = (
           type: "asset",
           fileName: route.fileName,
           source: withClientIslands(
-            withStyleSheets(route.html, styleSheets),
+            withStyleSheets(
+              route.html,
+              styleSheets.map(fileName =>
+                publicAssetUrl(publicBase, fileName, route.fileName),
+              ),
+            ),
             clientBundle,
+            route.fileName,
           ),
         })
       }
@@ -769,7 +811,7 @@ const staticSitePlugin = (
 }
 
 export const staticSite = (options: StaticSiteOptions): PluginOption => {
-  const clientIslands = createClientIslands()
+  const clientIslands = createClientIslands(options.client)
 
   return [
     ...options.integrations,
