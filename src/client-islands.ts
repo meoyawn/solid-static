@@ -125,11 +125,15 @@ const developmentModuleUrl = (
 
 export const createClientIslands = (): ClientIslands => {
   const entries = new Map<string, RegisteredIsland>()
+  let clientMinify: ResolvedConfig["build"]["minify"] = "oxc"
   let config: ResolvedConfig | undefined
 
   const plugin: Plugin = {
     name: "solid-static-client-islands",
     enforce: "pre",
+    config(userConfig) {
+      clientMinify = userConfig.build?.minify ?? "oxc"
+    },
     configResolved(resolvedConfig) {
       config = resolvedConfig
     },
@@ -203,7 +207,7 @@ export const createClientIslands = (): ClientIslands => {
       build: {
         cssCodeSplit: false,
         emptyOutDir: false,
-        minify: resolvedConfig.build.minify,
+        minify: clientMinify,
         rolldownOptions: {
           input: Object.fromEntries(
             [...entries].map(([key, island]) => [key, island.entryPath]),

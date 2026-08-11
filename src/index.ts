@@ -131,6 +131,10 @@ const withStyleSheets = (
   }
 
   const links = styleSheets
+    .filter(fileName => {
+      const href = fileName.startsWith("/") ? fileName : `/${fileName}`
+      return !html.includes(`href="${href}"`)
+    })
     .map(fileName => {
       const href = fileName.startsWith("/") ? fileName : `/${fileName}`
       return `<link rel="stylesheet" href="${href}">`

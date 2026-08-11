@@ -75,10 +75,14 @@ const createFixture = async (): Promise<string> => {
     writeFile(
       join(sourceDirectory, "pages", "index.tsx"),
       `import islandUrl from "../counter-island.tsx?island"
+import stylesheetUrl from "../page.css?url"
 
 export default () => (
   <html lang="en">
-    <head><title>Island fixture</title></head>
+    <head>
+      <title>Island fixture</title>
+      <link rel="stylesheet" href={stylesheetUrl} />
+    </head>
     <body>
       <p id="fallback">Static fallback</p>
       <div id="counter">Loading client island</div>
@@ -116,6 +120,11 @@ render(() => <Counter />, root)
     writeFile(
       join(sourceDirectory, "counter.css"),
       `#counter button { color: rgb(1, 2, 3); }
+`,
+    ),
+    writeFile(
+      join(sourceDirectory, "page.css"),
+      `body { margin: 0; }
 `,
     ),
   ])
@@ -185,6 +194,11 @@ test.describe("client islands", () => {
       expect(html).toMatch(
         /<link rel="stylesheet" href="\/assets\/islands\/[^"]+\.css">/,
       )
+      expect(
+        html.match(
+          /<link rel="stylesheet" href="\/assets\/page-[^"]+\.css">/g,
+        ),
+      ).toHaveLength(1)
 
       server = await createStaticServer(outputDirectory)
       await page.goto(server.url)
