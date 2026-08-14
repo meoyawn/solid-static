@@ -2,6 +2,8 @@
 
 An Astro-inspired static site implementation built as a Vite plugin with SolidJS and TSX.
 
+Read the introduction: [Another static site generator](https://adelnz.com/writing/another-static-site-generator/).
+
 Install from npm:
 
 ```sh
