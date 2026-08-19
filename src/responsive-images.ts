@@ -1,12 +1,21 @@
-import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
-import { basename, extname, join } from "node:path"
-import sharp from "sharp"
+import { extname, join } from "node:path"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
+import {
+  generatedImagePattern,
+  parseGeneratedImageRequest,
+  type GeneratedImageRequest,
+} from "./get-image.ts"
 import {
   getWidths,
   type ImageLayout,
 } from "./image-layout.ts"
+import {
+  createImagePipeline,
+  imageContentType,
+  type ImagePipeline,
+  type TransformedImage,
+} from "./image-pipeline.ts"
 
 type ImageFormat = "avif" | "webp"
 
@@ -21,6 +30,7 @@ interface ImageRequest {
 interface ImageVariant {
   content: Uint8Array
   height: number
+  name: string
   url: string
   width: number
 }
@@ -31,10 +41,20 @@ interface ProcessedImage {
   variants: ImageVariant[]
 }
 
+interface EmittedGeneratedImage extends TransformedImage {
+  url: string
+}
+
 interface ImageSourceAsset {
   fileName: string
   source: string | Uint8Array
   type: "asset"
+}
+
+interface GeneratedImageSource {
+  content: Uint8Array
+  fileName?: string
+  name: string
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -97,53 +117,40 @@ const parseImageRequest = (attributes: string): ImageRequest => {
 }
 
 const processImage = async (
-  source: Uint8Array,
-  sourceName: string,
+  pipeline: ImagePipeline,
   request: ImageRequest,
   urlFor: (name: string) => string,
 ): Promise<ProcessedImage> => {
-  const metadata = await sharp(source).metadata()
-  const originalWidth = metadata.width
-  const originalHeight = metadata.height
-
-  if (originalWidth === undefined || originalHeight === undefined) {
-    throw new TypeError(`${sourceName} has no dimensions`)
-  }
-
-  const baseName = basename(sourceName, extname(sourceName))
-  const sourceHash = createHash("sha256").update(source).digest("hex").slice(0, 8)
-  const defaultWidth = Math.min(request.width, originalWidth)
+  const defaultWidth = Math.min(request.width, pipeline.width)
   const srcSetWidths = [
     ...new Set(
       request.widths ??
         getWidths({
           layout: request.layout,
-          originalWidth,
+          originalWidth: pipeline.width,
           width: request.width,
         }),
     ),
   ]
     .filter(width => Number.isInteger(width) && width > 0)
-    .filter(width => width <= originalWidth)
+    .filter(width => width <= pipeline.width)
     .sort((left, right) => left - right)
   const outputWidths = [...new Set([defaultWidth, ...srcSetWidths])].sort(
     (left, right) => left - right,
   )
   const variants = await Promise.all(
     outputWidths.map(async width => {
-      const height = Math.round((originalHeight / originalWidth) * width)
-      const name = `${baseName}-${sourceHash}-${width}.${request.format}`
-      const transformer = sharp(source).resize({ height, width })
-      const content =
-        request.format === "avif"
-          ? await transformer.avif().toBuffer()
-          : await transformer.webp().toBuffer()
+      const image = await pipeline.transform({
+        format: request.format,
+        width,
+      })
 
       return {
-        content,
-        height,
-        url: urlFor(name),
-        width,
+        content: image.content,
+        height: image.height,
+        name: image.name,
+        url: urlFor(image.name),
+        width: image.width,
       }
     }),
   )
@@ -153,7 +160,9 @@ const processImage = async (
   const defaultVariant = variantsByWidth.get(defaultWidth)
 
   if (defaultVariant === undefined) {
-    throw new TypeError(`Responsive image ${sourceName} has no default variant`)
+    throw new TypeError(
+      `Responsive image ${pipeline.name} has no default variant`,
+    )
   }
 
   const srcSetVariants: ImageVariant[] = []
@@ -162,7 +171,9 @@ const processImage = async (
     const variant = variantsByWidth.get(width)
 
     if (variant === undefined) {
-      throw new TypeError(`Responsive image ${sourceName} is missing ${width}px`)
+      throw new TypeError(
+        `Responsive image ${pipeline.name} is missing ${width}px`,
+      )
     }
 
     srcSetVariants.push(variant)
@@ -232,6 +243,33 @@ const sourceBytes = (asset: ImageSourceAsset): Uint8Array =>
     ? asset.source
     : Buffer.from(asset.source)
 
+const generatedImageSource = (
+  bundle: Record<string, unknown>,
+  sourceUrl: string,
+): GeneratedImageSource => {
+  const dataImage =
+    /^data:image\/(?<format>avif|jpeg|jpg|png|svg\+xml|webp);base64,(?<content>.+)$/.exec(
+      sourceUrl,
+    )
+
+  if (dataImage?.groups?.content !== undefined) {
+    const format = dataImage.groups.format
+
+    return {
+      content: Buffer.from(dataImage.groups.content, "base64"),
+      name: `inline.${format === "svg+xml" ? "svg" : format}`,
+    }
+  }
+
+  const asset = sourceAsset(bundle, sourceUrl)
+
+  return {
+    content: sourceBytes(asset),
+    fileName: asset.fileName,
+    name: asset.fileName,
+  }
+}
+
 const devSourcePath = (config: ResolvedConfig, sourceUrl: string): string => {
   const pathname = new URL(sourceUrl, "http://solid-static.local").pathname
 
@@ -242,10 +280,59 @@ const devSourcePath = (config: ResolvedConfig, sourceUrl: string): string => {
   return join(config.root, pathname)
 }
 
+const replaceGeneratedImages = async (
+  html: string,
+  process: (request: GeneratedImageRequest) => Promise<EmittedGeneratedImage>,
+): Promise<string> => {
+  const matches = [...html.matchAll(generatedImagePattern)]
+  const operations = new Map<string, Promise<EmittedGeneratedImage>>()
+
+  for (const match of matches) {
+    const token = match.groups?.token
+
+    if (token !== undefined && !operations.has(token)) {
+      operations.set(token, process(parseGeneratedImageRequest(token)))
+    }
+  }
+
+  let output = html
+
+  for (const [token, operation] of operations) {
+    output = output.replaceAll(
+      `/@solid-static/get-image/${token}`,
+      (await operation).url,
+    )
+  }
+
+  return output
+}
+
+const publicAssetPath = (base: string, fileName: string): string => {
+  const pathBase = base.startsWith("/") ? base : "/"
+  return `${pathBase}${fileName}`.replace(/\/{2,}/g, "/")
+}
+
 export const responsiveImages = (): Plugin => {
   let config: ResolvedConfig
   let devServer: ViteDevServer | undefined
   const devAssets = new Map<string, Uint8Array>()
+  const devPipelines = new Map<string, Promise<ImagePipeline>>()
+  const devGeneratedImages = new Map<string, Promise<EmittedGeneratedImage>>()
+
+  function devPipelineFor(sourceUrl: string): Promise<ImagePipeline> {
+    const cached = devPipelines.get(sourceUrl)
+
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const operation = readFile(devSourcePath(config, sourceUrl)).then(source =>
+      createImagePipeline(source, sourceUrl),
+    )
+
+    devPipelines.set(sourceUrl, operation)
+    return operation
+  }
 
   return {
     name: "solid-static-responsive-images",
@@ -254,6 +341,11 @@ export const responsiveImages = (): Plugin => {
     },
     configureServer(server) {
       devServer = server
+      server.watcher.on("change", () => {
+        devAssets.clear()
+        devPipelines.clear()
+        devGeneratedImages.clear()
+      })
       server.middlewares.use(function responsiveImageMiddleware(
         request,
         response,
@@ -271,10 +363,20 @@ export const responsiveImages = (): Plugin => {
         }
 
         response.statusCode = 200
-        response.setHeader(
-          "Content-Type",
-          pathname.endsWith(".avif") ? "image/avif" : "image/webp",
-        )
+        const extension = extname(pathname).slice(1)
+        const format = extension === "jpg" ? "jpeg" : extension
+
+        if (
+          format !== "avif" &&
+          format !== "jpeg" &&
+          format !== "png" &&
+          format !== "webp"
+        ) {
+          next()
+          return
+        }
+
+        response.setHeader("Content-Type", imageContentType(format))
         response.end(content)
       })
     },
@@ -284,7 +386,7 @@ export const responsiveImages = (): Plugin => {
       }
 
       const cache = new Map<string, Promise<ProcessedImage>>()
-      return replaceImages(html, request => {
+      const withResponsiveImages = await replaceImages(html, request => {
         const key = `${request.sourceUrl}:${request.format}:${request.layout}:${request.width}:${request.widths?.join(",") ?? "auto"}`
         const cached = cache.get(key)
 
@@ -292,27 +394,85 @@ export const responsiveImages = (): Plugin => {
           return cached
         }
 
-        const operation = readFile(devSourcePath(config, request.sourceUrl)).then(
-          source =>
-            processImage(
-              source,
-              request.sourceUrl,
-              request,
-              name => `/@solid-static/images/${name}`,
-            ).then(image => {
-              for (const variant of image.variants) {
-                devAssets.set(variant.url, variant.content)
-              }
-              return image
-            }),
+        const operation = devPipelineFor(request.sourceUrl).then(pipeline =>
+          processImage(
+            pipeline,
+            request,
+            name => `/@solid-static/images/${name}`,
+          ).then(image => {
+            for (const variant of image.variants) {
+              devAssets.set(variant.url, variant.content)
+            }
+            return image
+          }),
         )
         cache.set(key, operation)
+        return operation
+      })
+      return replaceGeneratedImages(withResponsiveImages, request => {
+        const key = JSON.stringify(request)
+        const cached = devGeneratedImages.get(key)
+
+        if (cached !== undefined) {
+          return cached
+        }
+
+        const operation = devPipelineFor(request.sourceUrl).then(
+          async pipeline => {
+            const image = await pipeline.transform(request)
+            const url = `/@solid-static/images/${image.name}`
+
+            devAssets.set(url, image.content)
+            return {
+              content: image.content,
+              height: image.height,
+              name: image.name,
+              url,
+              width: image.width,
+            }
+          },
+        )
+
+        devGeneratedImages.set(key, operation)
         return operation
       })
     },
     async generateBundle(_outputOptions, bundle) {
       const cache = new Map<string, Promise<ProcessedImage>>()
+      const generatedCache = new Map<string, Promise<EmittedGeneratedImage>>()
+      const pipelines = new Map<string, Promise<ImagePipeline>>()
+      const transformedImages = new Map<string, TransformedImage>()
       const transformedSourceFiles = new Set<string>()
+
+      function imageFileName(name: string): string {
+        const assetsDirectory = config.build.assetsDir.replace(/^\/+|\/+$/g, "")
+        return assetsDirectory === "" ? name : `${assetsDirectory}/${name}`
+      }
+
+      function imageUrl(name: string): string {
+        return publicAssetPath(config.base, imageFileName(name))
+      }
+
+      function pipelineFor(
+        sourceUrl: string,
+        source: GeneratedImageSource,
+      ): Promise<ImagePipeline> {
+        const cached = pipelines.get(sourceUrl)
+
+        if (cached !== undefined) {
+          return cached
+        }
+
+        const operation = createImagePipeline(source.content, source.name)
+
+        pipelines.set(sourceUrl, operation)
+        return operation
+      }
+
+      function registerImage(image: TransformedImage): string {
+        transformedImages.set(image.name, image)
+        return imageUrl(image.name)
+      }
 
       for (const output of Object.values(bundle)) {
         if (output.type !== "asset" || !output.fileName.endsWith(".html")) {
@@ -329,25 +489,62 @@ export const responsiveImages = (): Plugin => {
             return cached
           }
 
-          const operation = processImage(
-            sourceBytes(asset),
-            asset.fileName,
-            request,
-            name => `/assets/${name}`,
+          const operation = pipelineFor(request.sourceUrl, {
+            content: sourceBytes(asset),
+            fileName: asset.fileName,
+            name: asset.fileName,
+          }).then(pipeline =>
+            processImage(pipeline, request, imageUrl).then(image => {
+              for (const variant of image.variants) {
+                registerImage(variant)
+              }
+              return image
+            }),
           )
           cache.set(key, operation)
           return operation
         })
+        output.source = await replaceGeneratedImages(
+          output.source.toString(),
+          request => {
+            const source = generatedImageSource(bundle, request.sourceUrl)
+
+            if (source.fileName !== undefined) {
+              transformedSourceFiles.add(source.fileName)
+            }
+
+            const key = JSON.stringify(request)
+            const cached = generatedCache.get(key)
+
+            if (cached !== undefined) {
+              return cached
+            }
+
+            const operation = pipelineFor(request.sourceUrl, source).then(
+              async pipeline => {
+                const image = await pipeline.transform(request)
+                return {
+                  content: image.content,
+                  height: image.height,
+                  name: image.name,
+                  url: registerImage(image),
+                  width: image.width,
+                }
+              },
+            )
+
+            generatedCache.set(key, operation)
+            return operation
+          },
+        )
       }
 
-      for (const operation of cache.values()) {
-        for (const variant of (await operation).variants) {
-          this.emitFile({
-            fileName: variant.url.replace(/^\//, ""),
-            source: variant.content,
-            type: "asset",
-          })
-        }
+      for (const image of transformedImages.values()) {
+        this.emitFile({
+          fileName: imageFileName(image.name),
+          source: image.content,
+          type: "asset",
+        })
       }
 
       for (const fileName of transformedSourceFiles) {

@@ -22,6 +22,7 @@ import {
   type ClientIslandBundle,
   type ClientIslands,
 } from "./client-islands.ts"
+import { responsiveImages } from "./responsive-images.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -818,5 +819,6 @@ export const staticSite = (options: StaticSiteOptions): PluginOption => {
     clientIslands.plugin,
     solid({ ssr: true }),
     staticSitePlugin(options, clientIslands),
+    responsiveImages(),
   ]
 }

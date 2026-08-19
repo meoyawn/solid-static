@@ -4,6 +4,17 @@ import {
   type ImageLayout,
 } from "./image-layout.ts"
 
+export {
+  getImage,
+  type GetImageOptions,
+  type GetImageResult,
+  type ImageMetadata,
+  type ImageOutputFormat,
+  type ImageQuality,
+  type ImageQualityPreset,
+  type ImageTransform,
+} from "./get-image.ts"
+
 export interface ResponsiveImageProps
   extends JSX.ImgHTMLAttributes<HTMLImageElement> {
   alt: string
