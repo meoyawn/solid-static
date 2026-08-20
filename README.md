@@ -137,6 +137,52 @@ export default function Home() {
 
 The responsive images integration generates the requested variants and adds the resulting `srcset` during development and production builds.
 
+### `getImage()`
+
+Use `getImage()` during server rendering to generate one transformed image. It follows Astro's [`getImage()` pattern](https://docs.astro.build/en/guides/images/#generating-images-with-getimage) for images used outside a standard image component. Import it from `solid-static/image`, then await it at module scope or inside an async server-rendered component:
+
+```tsx
+import source from "../assets/social-preview.png";
+import { getImage } from "solid-static/image";
+
+const preview = await getImage({
+  src: source,
+  width: 1200,
+  height: 630,
+  format: "jpg",
+  quality: "high",
+  fit: "cover",
+  position: "center",
+});
+
+export default function Page() {
+  return (
+    <html>
+      <head>
+        <meta property="og:image" content={preview.src} />
+      </head>
+      <body>
+        <img src={preview.src} alt="" {...preview.attributes} />
+      </body>
+    </html>
+  );
+}
+```
+
+`getImage(options)` accepts:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `src` | `string \| ImageMetadata` | required | Imported image URL or `{ src, width, height, format }` metadata. |
+| `width` | positive integer | source width | Output width. |
+| `height` | positive integer | source height | Output height. |
+| `format` | `"avif" \| "jpeg" \| "jpg" \| "png" \| "webp"` | `"webp"` | Output format. |
+| `quality` | `0`–`100` or `"low" \| "mid" \| "high" \| "max"` | encoder default | Output quality. |
+| `fit` | `"contain" \| "cover" \| "fill" \| "inside" \| "outside"` | `"cover"` | How the source fits the requested dimensions. |
+| `position` | `string` | `"center"` | Crop or embed position used by the image transformer. |
+
+When `src` contains image metadata, specifying only `width` or `height` infers the other dimension while preserving the aspect ratio. The returned promise resolves to a `GetImageResult` containing the generated `src`, inferred `attributes`, normalized `options`, original `rawOptions`, and an Astro-compatible `srcSet` object. Generated URLs work in both the Vite development server and production builds. `getImage()` throws if called in the browser.
+
 ## Documentation
 
 Dedicated documentation is not available yet. For the concepts and intended behavior, see the corresponding Astro guides:
@@ -144,5 +190,6 @@ Dedicated documentation is not available yet. For the concepts and intended beha
 - [Images](https://docs.astro.build/en/guides/images/)
 - [Markdown content](https://docs.astro.build/en/guides/markdown-content/)
 - [Content collections](https://docs.astro.build/en/guides/content-collections/)
+- [Internationalization](https://docs.astro.build/en/guides/internationalization/)
 - [Pages](https://docs.astro.build/en/basics/astro-pages/)
 - [Configuration](https://docs.astro.build/en/guides/configuring-astro/)
