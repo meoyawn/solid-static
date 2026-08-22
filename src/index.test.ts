@@ -7,7 +7,88 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createServer as createViteServer } from "vite"
-import { staticSite } from "./index.ts"
+import { createSitemap, staticSite } from "./index.ts"
+import {
+  createMarkdownSiblings,
+  markdownFileNameFor,
+} from "./markdown-export.ts"
+
+describe("Markdown export", () => {
+  test("maps an empty HTML basename to the root Markdown document", () => {
+    expect(markdownFileNameFor(".html")).toBe("index.md")
+  })
+
+  test("generates route siblings from main content and applies exclusions", async () => {
+    await expect(
+      createMarkdownSiblings(
+        [
+          {
+            fileName: "index.html",
+            html: `<html><body><header>Navigation</header><main><h1>Hello</h1><p>Read <a href="/about/">about</a>.</p><pre><code class="language-ts">const value = 1</code></pre></main><footer>Footer</footer></body></html>`,
+          },
+          {
+            fileName: "404.html",
+            html: "<html><body><main>Not found</main></body></html>",
+          },
+        ],
+        {
+          exclude: ["404.html"],
+          transform: (markdown, fileName) => `<!-- ${fileName} -->\n\n${markdown}`,
+        },
+      ),
+      ).resolves.toEqual([
+        {
+          fileName: "index.md",
+          source:
+            '<!-- index.html -->\n\n# Hello\n\nRead [about](/about/).\n\n```ts\nconst value = 1\n```\n',
+        },
+      ])
+
+    await expect(
+      createMarkdownSiblings(
+        [
+          {
+            fileName: "writing/example/index.html",
+            html: "<main><h1>Example</h1></main>",
+          },
+        ],
+        {},
+      ),
+    ).resolves.toEqual([
+      {
+        fileName: "writing/example/index.md",
+        source: "# Example\n",
+      },
+    ])
+  })
+})
+
+describe("sitemap generation", () => {
+  test("emits canonical URLs for generated pages and skips the 404 page", () => {
+    expect(
+      createSitemap(
+        [
+          { fileName: "index.html" },
+          { fileName: "about/index.html" },
+          { fileName: "writing/example/index.html" },
+          { fileName: "404.html" },
+        ],
+        { lastmod: "2026-08-22", site: "https://example.com/" },
+        "always",
+      ),
+    ).toEqual(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        '  <url><loc>https://example.com/</loc><lastmod>2026-08-22</lastmod></url>',
+        '  <url><loc>https://example.com/about/</loc><lastmod>2026-08-22</lastmod></url>',
+        '  <url><loc>https://example.com/writing/example/</loc><lastmod>2026-08-22</lastmod></url>',
+        "</urlset>",
+        "",
+      ].join("\n"),
+    )
+  })
+})
 
 describe("vite static-site development server", () => {
   test("returns an HTTP error when page frontmatter cannot be parsed", async () => {

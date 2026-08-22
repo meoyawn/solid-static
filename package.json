@@ -1,6 +1,6 @@
 {
   "name": "solid-static",
-  "version": "0.3.0",
+  "version": "0.3.16",
   "type": "module",
   "files": [
     "dist"
@@ -49,6 +49,8 @@
     "remark-rehype": "^11.1.2",
     "sharp": "^0.35.3",
     "solid-jsx": "^1.1.4",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
     "unified": "11.0.5",
     "vite-plugin-solid": "^2.11.14"
   },

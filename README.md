@@ -34,9 +34,36 @@ export default defineConfig({
       },
       integrations: [solidMarkdown(), responsiveImages()],
       markdown: { processor: createHtmlMarkdownProcessor() },
+      markdownExport: { exclude: [], force404Markdown: true },
       trailingSlash: "always",
     }),
   ],
+});
+```
+
+Set `markdownExport` to generate a Markdown sibling for every emitted HTML
+page at build time. The generated files are output-relative route documents
+(`index.md`, `about/index.md`, and so on), with no extra slashless `.md`
+aliases. For Cloudflare Pages, pair this with a Free Transform Rule matching
+`GET` requests whose `Accept` header contains `text/markdown` and rewrite the
+path dynamically with `concat(http.request.uri.path, "index.md")`. Thus `/`
+maps to `/index.md` and `/about/` maps to `/about/index.md` without a Worker.
+The option is static-only and does not add a runtime server or Worker. Keep
+`404.html` included and set `force404Markdown: true` when the same Free
+Cloudflare setup should serve the generated Markdown body for missing paths.
+The generated 404 asset remains a real 404 and can be labeled
+`Content-Type: text/markdown` by a response-header Transform Rule when the
+request accepts Markdown.
+
+```ts
+staticSite({
+  // ...other options
+  markdownExport: {
+    exclude: ["404.html"],
+    selectors: ["main", "article", "body"],
+    transform: (markdown, fileName) =>
+      `<!-- generated from ${fileName} -->\n\n${markdown}`,
+  },
 });
 ```
 

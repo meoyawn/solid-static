@@ -22,6 +22,10 @@ import {
   type ClientIslandBundle,
   type ClientIslands,
 } from "./client-islands.ts"
+import {
+  createMarkdownSiblings,
+  type StaticSiteMarkdownExportOptions,
+} from "./markdown-export.ts"
 import { responsiveImages } from "./responsive-images.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
@@ -34,6 +38,15 @@ export interface StaticSiteI18nOptions {
   }
 }
 
+export interface StaticSiteSitemapOptions {
+  /** Canonical site origin used for sitemap `<loc>` values. */
+  site: string
+  /** ISO 8601 date used for every emitted URL when supplied. */
+  lastmod?: string
+}
+
+export type { StaticSiteMarkdownExportOptions }
+
 export interface StaticSiteOptions {
   client?: UserConfig
   collections: CollectionDefinitions
@@ -42,6 +55,8 @@ export interface StaticSiteOptions {
   markdown: {
     processor: MarkdownProcessor
   }
+  markdownExport?: StaticSiteMarkdownExportOptions
+  sitemap?: StaticSiteSitemapOptions
   trailingSlash: "always" | "never"
 }
 
@@ -224,6 +239,84 @@ const validateOptions = (options: ResolvedStaticSiteOptions): void => {
     throw new TypeError("i18n.locales must not contain duplicates")
   }
 
+  if (options.sitemap !== undefined) {
+    let site: URL
+
+    try {
+      site = new URL(options.sitemap.site)
+    } catch {
+      throw new TypeError("sitemap.site must be an absolute URL")
+    }
+
+    if (site.protocol !== "http:" && site.protocol !== "https:") {
+      throw new TypeError("sitemap.site must use http or https")
+    }
+
+    if (options.sitemap.lastmod !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}(?:T[^\s]+)?$/.test(options.sitemap.lastmod)) {
+        throw new TypeError(
+          "sitemap.lastmod must be an ISO 8601 date or datetime",
+        )
+      }
+    }
+  }
+
+}
+
+const escapeXml = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;")
+
+const publicPathForFileName = (
+  fileName: string,
+  trailingSlash: StaticSiteOptions["trailingSlash"],
+): string | undefined => {
+  if (fileName === "404.html") {
+    return undefined
+  }
+
+  if (fileName === "index.html") {
+    return "/"
+  }
+
+  if (fileName.endsWith("/index.html")) {
+    const path = `/${fileName.slice(0, -"index.html".length)}`
+    return trailingSlash === "always" ? path : path.slice(0, -1)
+  }
+
+  if (fileName.endsWith(".html")) {
+    return `/${fileName.slice(0, -".html".length)}`
+  }
+
+  return undefined
+}
+
+export const createSitemap = (
+  routes: ReadonlyArray<{ fileName: string }>,
+  options: StaticSiteSitemapOptions,
+  trailingSlash: StaticSiteOptions["trailingSlash"],
+): string => {
+  const site = options.site.replace(/\/+$/, "")
+  const lastmod = options.lastmod ?? new Date().toISOString().slice(0, 10)
+  const urls = routes.flatMap(route => {
+    const path = publicPathForFileName(route.fileName, trailingSlash)
+
+    return path === undefined
+      ? []
+      : [`  <url><loc>${escapeXml(`${site}${path}`)}</loc><lastmod>${lastmod}</lastmod></url>`]
+  })
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls,
+    "</urlset>",
+    "",
+  ].join("\n")
 }
 
 const parsePageFrontmatter = (
@@ -791,20 +884,50 @@ const staticSitePlugin = (
         })
       }
 
+      const markdownRoutes =
+        options.markdownExport === undefined
+          ? []
+          : await createMarkdownSiblings(routes, options.markdownExport)
+      const markdown404Source =
+        options.markdownExport?.force404Markdown === true
+          ? markdownRoutes.find(route => route.fileName === "404.md")?.source
+          : undefined
+
       for (const route of routes) {
+        const renderedHtml = withClientIslands(
+          withStyleSheets(
+            route.html,
+            styleSheets.map(fileName =>
+              publicAssetUrl(publicBase, fileName, route.fileName),
+            ),
+          ),
+          clientBundle,
+          route.fileName,
+        )
+
         this.emitFile({
           type: "asset",
           fileName: route.fileName,
-          source: withClientIslands(
-            withStyleSheets(
-              route.html,
-              styleSheets.map(fileName =>
-                publicAssetUrl(publicBase, fileName, route.fileName),
-              ),
-            ),
-            clientBundle,
-            route.fileName,
-          ),
+          source:
+            route.fileName === "404.html" && markdown404Source !== undefined
+              ? markdown404Source
+              : renderedHtml,
+        })
+      }
+
+      for (const markdownRoute of markdownRoutes) {
+        this.emitFile({
+          type: "asset",
+          fileName: markdownRoute.fileName,
+          source: markdownRoute.source,
+        })
+      }
+
+      if (options.sitemap !== undefined) {
+        this.emitFile({
+          type: "asset",
+          fileName: "sitemap.xml",
+          source: createSitemap(routes, options.sitemap, options.trailingSlash),
         })
       }
     },
