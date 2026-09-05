@@ -1,5 +1,7 @@
 # solid-static
 
+[![npm version](https://img.shields.io/npm/v/solid-static.svg)](https://www.npmjs.com/package/solid-static)
+
 An Astro-inspired static site implementation built as a Vite plugin with SolidJS and TSX.
 
 Read the introduction: [Another static site generator](https://adelnz.com/writing/another-static-site-generator/).
