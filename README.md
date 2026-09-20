@@ -71,6 +71,29 @@ staticSite({
 
 Add `.tsx`, `.md`, or `.mdx` pages under `src/pages`. The directory structure determines each page's route. Markdown pages must declare a SolidJS layout in their frontmatter.
 
+### Markdown headings and tables of contents
+
+`createHtmlMarkdownProcessor()` assigns stable, GitHub-style IDs to headings.
+Repeated headings receive unique suffixes, with numbering scoped to each document.
+Markdown and MDX pages using `solidMarkdown()` also receive heading IDs.
+
+Rendered content collection entries expose `rendered.html` and
+`rendered.headings`. Each heading contains `depth` (1–6), `slug` (the HTML ID),
+and plain `text`. Build a table of contents from this metadata instead of parsing
+the HTML a second time:
+
+```tsx
+<nav aria-label="On this page">
+  <For each={entry.rendered.headings.filter(heading => heading.depth === 2)}>
+    {heading => <a href={`#${heading.slug}`}>{heading.text}</a>}
+  </For>
+</nav>
+<article innerHTML={entry.rendered.html} />
+```
+
+Custom Markdown processors can provide the same metadata through their result's
+`data.headings`. Results without heading metadata produce an empty headings list.
+
 ### Client islands
 
 Import a self-mounting browser entry with the `?island` query, then reference the returned URL from a module script. The page remains static HTML; only the named entry and its imports are compiled for the browser.
@@ -211,6 +234,33 @@ export default function Page() {
 | `position` | `string` | `"center"` | Crop or embed position used by the image transformer. |
 
 When `src` contains image metadata, specifying only `width` or `height` infers the other dimension while preserving the aspect ratio. The returned promise resolves to a `GetImageResult` containing the generated `src`, inferred `attributes`, normalized `options`, original `rawOptions`, and an Astro-compatible `srcSet` object. Generated URLs work in both the Vite development server and production builds. `getImage()` throws if called in the browser.
+
+## Development and CI
+
+Install Node.js 24, Nub 0.9, and Moon 2.5.5, then run:
+
+```sh
+nub install --frozen-lockfile
+nubx playwright install chromium
+moon run solid-static:check
+```
+
+`moon.yml` owns the build, lint, typecheck, unit, and browser tasks. Tests depend
+on the package build because Vite fixtures resolve the package's exported runtime
+from `dist`. A clean checkout does not need prebuilt artifacts.
+
+The standalone GitHub workflow follows [Moon's CI guide](https://moonrepo.dev/docs/guides/ci):
+full Git history, dependency installation, then `moon ci` to select affected
+tasks and their dependencies/dependents. It uploads native reports and keeps
+publication out of CI. There is no separate CI-only task graph or persisted
+Moon workspace cache.
+
+The same project tasks can be registered as `solid-static` in a parent Moon
+workspace. Consumers should depend on `solid-static:build` and use a workspace
+package dependency. The parent owns dependency and browser installation; the
+submodule's standalone workflow does not run inside the parent's workflow.
+
+To publish an explicitly approved release, use `moon run solid-static:publish`.
 
 ## Documentation
 

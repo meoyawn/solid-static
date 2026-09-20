@@ -4,8 +4,20 @@ import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
+export interface MarkdownHeading {
+  depth: number
+  slug: string
+  text: string
+}
+
+export interface RenderedMarkdown {
+  html: string
+  headings: MarkdownHeading[]
+}
+
 export interface MarkdownProcessor {
   process(file: { path: string; value: string }): Promise<{
+    data?: { headings?: MarkdownHeading[] | undefined } | undefined
     toString(): string
   }>
 }
@@ -23,11 +35,7 @@ export interface CollectionEntry<TData = unknown> {
   body?: string | undefined
   data: TData
   id: string
-  rendered?:
-    | {
-        html: string
-      }
-    | undefined
+  rendered?: RenderedMarkdown | undefined
 }
 
 export type CollectionEntryFor<TDefinitions, TName extends keyof TDefinitions> =
@@ -40,9 +48,7 @@ export type RenderedCollectionEntryFor<
   TName extends keyof TDefinitions,
 > = CollectionEntryFor<TDefinitions, TName> & {
   body: string
-  rendered: {
-    html: string
-  }
+  rendered: RenderedMarkdown
 }
 
 export type LoadedCollectionEntry = CollectionEntry
@@ -123,21 +129,21 @@ const loadCollection = async (
       const id = definition.id?.(relativePath) ?? defaultId(relativePath)
       const parsed = parseSource(await readFile(filePath, "utf8"), relativePath)
       const data = definition.schema?.(parsed.data, relativePath) ?? parsed.data
+      const rendered =
+        parsed.renderable && markdownProcessor !== undefined
+          ? await markdownProcessor.process({ path: filePath, value: parsed.body })
+          : undefined
 
       return {
         ...(parsed.renderable
           ? {
               body: parsed.body,
-              ...(markdownProcessor === undefined
+              ...(rendered === undefined
                 ? {}
                 : {
                     rendered: {
-                      html: String(
-                        await markdownProcessor.process({
-                          path: filePath,
-                          value: parsed.body,
-                        }),
-                      ),
+                      html: String(rendered),
+                      headings: rendered.data?.headings ?? [],
                     },
                   }),
             }
