@@ -37,7 +37,7 @@ jobs:
       - run: nubx playwright install --with-deps chromium
       - name: Check affected tasks
         id: ci
-        run: moon ci --include-relations --downstream deep
+        run: moon ci
       - uses: moonrepo/run-report-action@v1
         if: "!cancelled() && steps.ci.outcome != 'skipped'"
         with:
