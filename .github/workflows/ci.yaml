@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: nubjs/setup-nub@v0
+        with:
+          nub-version: ^0.9.0
+          cache: true
+          cache-dependency-path: |
+            nub.lock
+            package.json
+      - uses: moonrepo/setup-toolchain@v0
+        with:
+          moon-version: "2.5.5"
+      - run: nub install --frozen-lockfile
+      - run: nubx playwright install --with-deps chromium
+      - name: Check affected tasks
+        id: ci
+        run: moon ci
+      - uses: moonrepo/run-report-action@v1
+        if: "!cancelled() && steps.ci.outcome != 'skipped'"
+        with:
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          skip-comment: true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: moon-reports-${{ github.run_attempt }}
+          path: |
+            .moon/cache/ciReport.json
+            .moon/cache/runReport.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 1

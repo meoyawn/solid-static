@@ -1,0 +1,79 @@
+toolchains:
+  default: system
+tasks:
+  lint:
+    command: nubx oxlint --config .oxlintrc.json src e2e playwright.config.ts
+    inputs:
+      - .oxlintrc.json
+      - src/**/*
+      - e2e/**/*
+      - playwright.config.ts
+      - package.json
+      - /nub.lock
+  build:
+    command: nubx tsc -p tsconfig.build.json
+    inputs:
+      - src/**/*
+      - package.json
+      - tsconfig.json
+      - tsconfig.build.json
+      - /nub.lock
+    outputs:
+      - dist/**/*
+  typecheck:
+    command: nubx tsc
+    inputs:
+      - src/**/*
+      - package.json
+      - tsconfig.json
+      - /nub.lock
+  typecheck-playwright:
+    command: nubx tsc -p tsconfig.playwright.json
+    inputs:
+      - src/**/*
+      - e2e/**/*
+      - package.json
+      - playwright.config.ts
+      - tsconfig.json
+      - tsconfig.playwright.json
+      - /nub.lock
+  test-unit:
+    command: nubx vitest run
+    deps:
+      - ~:build
+    inputs:
+      - src/**/*
+      - package.json
+      - tsconfig.json
+      - vitest.config.ts
+      - /nub.lock
+  test-e2e:
+    command: nubx playwright test
+    deps:
+      - ~:build
+    inputs:
+      - src/**/*
+      - e2e/**/*
+      - playwright.config.ts
+      - tsconfig.playwright.json
+      - package.json
+      - /nub.lock
+  check:
+    deps:
+      - ~:lint
+      - ~:typecheck
+      - ~:typecheck-playwright
+      - ~:test-unit
+      - ~:test-e2e
+    options:
+      runInCI: false
+    inputs: []
+  publish:
+    command: nub publish --access public
+    deps:
+      - ~:check
+      - ~:build
+    options:
+      cache: false
+      runInCI: false
+    inputs: []

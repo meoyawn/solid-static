@@ -1,4 +1,4 @@
-.task/
+.moon/cache/
 node_modules/
 dist/
 .npmrc

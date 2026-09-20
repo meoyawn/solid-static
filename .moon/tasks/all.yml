@@ -1,0 +1,6 @@
+implicitInputs:
+  - moon.yml
+  - package.json
+  - nub.lock
+  - /.moon/**/*.yml
+  - /.github/workflows/ci.yaml

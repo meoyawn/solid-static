@@ -9,8 +9,8 @@
 
 ## Verification
 
-- after significant changes run `task check`
+- after significant changes run `moon run solid-static:check`
 
 ## Releases
 
-- agent can do `task publish` if human asks for it explicitly. Verbs: "publish"/"release"
+- agent can do `moon run solid-static:publish` if human asks for it explicitly. Verbs: "publish"/"release"
