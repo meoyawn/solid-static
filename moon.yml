@@ -2,8 +2,9 @@ toolchains:
   default: system
 tasks:
   lint:
-    command: nubx oxlint src e2e playwright.config.ts
+    command: nubx oxlint --config .oxlintrc.json src e2e playwright.config.ts
     inputs:
+      - .oxlintrc.json
       - src/**/*
       - e2e/**/*
       - playwright.config.ts
@@ -54,6 +55,7 @@ tasks:
       - src/**/*
       - e2e/**/*
       - playwright.config.ts
+      - tsconfig.playwright.json
       - package.json
       - /nub.lock
   check:

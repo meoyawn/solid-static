@@ -250,7 +250,8 @@ on the package build because Vite fixtures resolve the package's exported runtim
 from `dist`. A clean checkout does not need prebuilt artifacts.
 
 The standalone GitHub workflow follows [Moon's CI guide](https://moonrepo.dev/docs/guides/ci):
-full Git history, dependency installation, then `moon ci` to select affected
+full Git history, dependency installation, then
+`moon ci --include-relations --downstream deep` to select affected
 tasks and their dependencies/dependents. It uploads native reports and keeps
 publication out of CI. There is no separate CI-only task graph or persisted
 Moon workspace cache.
