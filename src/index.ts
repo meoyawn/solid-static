@@ -41,7 +41,7 @@ export interface StaticSiteI18nOptions {
 export interface StaticSiteSitemapOptions {
   /** Canonical site origin used for sitemap `<loc>` values. */
   site: string
-  /** ISO 8601 date used for every emitted URL when supplied. */
+  /** ISO 8601 modification date used for every emitted URL; omitted when absent. */
   lastmod?: string
 }
 
@@ -301,13 +301,13 @@ export const createSitemap = (
   trailingSlash: StaticSiteOptions["trailingSlash"],
 ): string => {
   const site = options.site.replace(/\/+$/, "")
-  const lastmod = options.lastmod ?? new Date().toISOString().slice(0, 10)
+  const lastmod = options.lastmod === undefined ? "" : `<lastmod>${options.lastmod}</lastmod>`
   const urls = routes.flatMap(route => {
     const path = publicPathForFileName(route.fileName, trailingSlash)
 
     return path === undefined
       ? []
-      : [`  <url><loc>${escapeXml(`${site}${path}`)}</loc><lastmod>${lastmod}</lastmod></url>`]
+      : [`  <url><loc>${escapeXml(`${site}${path}`)}</loc>${lastmod}</url>`]
   })
 
   return [

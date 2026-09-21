@@ -64,6 +64,24 @@ describe("Markdown export", () => {
 })
 
 describe("sitemap generation", () => {
+  test("omits modification dates when none are supplied", () => {
+    expect(
+      createSitemap(
+        [{ fileName: "index.html" }],
+        { site: "https://example.com" },
+        "always",
+      ),
+    ).toEqual(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        "  <url><loc>https://example.com/</loc></url>",
+        "</urlset>",
+        "",
+      ].join("\n"),
+    )
+  })
+
   test("emits canonical URLs for generated pages and skips the 404 page", () => {
     expect(
       createSitemap(

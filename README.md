@@ -37,11 +37,18 @@ export default defineConfig({
       integrations: [solidMarkdown(), responsiveImages()],
       markdown: { processor: createHtmlMarkdownProcessor() },
       markdownExport: { exclude: [], force404Markdown: true },
+      sitemap: { site: "https://example.com" },
       trailingSlash: "always",
     }),
   ],
 });
 ```
+
+Set `sitemap.site` to the canonical site origin to generate `sitemap.xml` from
+the rendered page routes. The sitemap follows `trailingSlash` and excludes the
+404 page. Modification dates are omitted by default. Supply `sitemap.lastmod`
+only when an accurate ISO 8601 modification date applies to every emitted page;
+the build date is not used as a substitute for content modification dates.
 
 Set `markdownExport` to generate a Markdown sibling for every emitted HTML
 page at build time. The generated files are output-relative route documents
