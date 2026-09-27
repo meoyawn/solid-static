@@ -59,12 +59,14 @@
     "vite-plugin-solid": "^2.11.14"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
     "@types/hast": "^3.0.5",
     "@types/js-yaml": "^4.0.9",
     "@types/mdast": "^4.0.4",
     "@types/node": "^26.2.0",
+    "acorn": "^8.18.0",
+    "cheerio": "^1.2.0",
     "oxlint": "^1.78.0",
+    "postcss": "^8.5.28",
     "remark-parse": "^11.0.0",
     "solid-js": "^1.9.14",
     "typescript": "^7.0.2",

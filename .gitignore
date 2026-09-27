@@ -3,5 +3,3 @@ node_modules/
 dist/
 .npmrc
 .solid-static-islands*
-playwright-report/
-test-results/

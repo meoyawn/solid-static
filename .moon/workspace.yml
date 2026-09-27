@@ -1,6 +1,5 @@
 defaultProject: solid-static
 projects:
-  compose: compose
   solid-static: .
 versionConstraint: ">=2.5.4 <3.0.0"
 vcs:

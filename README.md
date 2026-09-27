@@ -244,33 +244,23 @@ When `src` contains image metadata, specifying only `width` or `height` infers t
 
 ## Development and CI
 
-Install Node.js 24, Nub 0.9, Moon 2.5.5, and Docker with Compose, then run:
+Install Node.js 24, Nub 0.9, and Moon 2.5.5, then run:
 
 ```sh
 nub install --frozen-lockfile
 moon run solid-static:check
 ```
 
-`moon.yml` owns the build, lint, typecheck, unit, and browser tasks. Tests depend
+`moon.yml` owns the build, lint, typecheck, and Vitest tasks. Tests depend
 on the package build because Vite fixtures resolve the package's exported runtime
 from `dist`. A clean checkout does not need prebuilt artifacts.
 
-Browser tests also depend on `compose:up-d`. The service in
-`compose/docker-compose.yaml` owns one Playwright server, its readiness check,
-and its lifetime. Its image installs Playwright and Chromium using the exact
-client version in `package.json`; no host browser or `node_modules` mount is
-needed. The runtime uses Debian slim and only Chromium's headless shell. Nub
-installs dependencies in a separate build stage, keeping its binaries and cache
-out of the runtime image. Compose enables `init` and host IPC following
-[Playwright's Docker recommendations](https://playwright.dev/docs/docker#recommended-docker-configuration).
-Compose uses host networking so the browser can reach test servers at
-their normal localhost URLs, without a proxy. This works on Linux and OrbStack;
-Docker Desktop 4.34 or newer needs host networking enabled in its settings.
-`compose/playwright.ts` reads the server's dynamically assigned loopback endpoint
-from the container. All workers share one Chromium process, with isolated contexts
-and tabs per test. Disconnecting closes only that connection's contexts; the
-browser and other workers keep running. A browser crash exits the service so
-Compose can restart it. A connection failure fails the test.
+All tests run in Node without a browser or Docker. Integrated Vite fixtures build
+real sites, then Cheerio, PostCSS, and Acorn check generated HTML, CSS, and
+JavaScript: static fallback content, hashed links, stylesheet deduplication,
+page-specific styles, shared chunks, and root, relative, subpath, and CDN bases.
+Development tests request Vite's HTML and transformed assets directly over HTTP.
+Each fixture owns its temporary files and ephemeral ports.
 
 The JavaScript and Node toolchains in `.moon/toolchains.yml` use Nub for package
 execution. Installation remains an explicit setup step, and tasks live only in
@@ -286,11 +276,8 @@ Moon workspace cache.
 
 The same project tasks can be registered as `solid-static` in a parent Moon
 workspace. Consumers should depend on `solid-static:build` and use a workspace
-package dependency. The parent owns dependency installation and provides
-`compose:up-d` by including this repository's `compose/docker-compose.yaml` in
-its own Compose project. Keep parent Playwright client versions aligned with
-this package. The submodule's standalone workflow does not run inside the
-parent's workflow.
+package dependency. The parent owns dependency installation. The submodule's
+standalone workflow does not run inside the parent's workflow.
 The parent can extend `.moon/toolchains.yml` from this package to share the
 same toolchain configuration. The `sources` file group covers package source
 and build configuration for consumers' cache inputs.

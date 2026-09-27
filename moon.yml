@@ -5,22 +5,16 @@ tags: [node]
 toolchains:
   default: node
 fileGroups:
-  browser:
-    - compose/**/*
-    - package.json
   sources:
     - src/**/*
     - package.json
     - tsconfig*.json
 tasks:
   lint:
-    command: nub exec oxlint --config .oxlintrc.json src e2e compose playwright.config.ts
+    command: nub exec oxlint --config .oxlintrc.json src
     inputs:
       - .oxlintrc.json
-      - compose/**/*.ts
       - src/**/*
-      - e2e/**/*
-      - playwright.config.ts
       - package.json
       - /nub.lock
   build:
@@ -40,18 +34,7 @@ tasks:
       - package.json
       - tsconfig.json
       - /nub.lock
-  typecheck-playwright:
-    command: nub exec tsc -p tsconfig.playwright.json
-    inputs:
-      - compose/**/*.ts
-      - src/**/*
-      - e2e/**/*
-      - package.json
-      - playwright.config.ts
-      - tsconfig.json
-      - tsconfig.playwright.json
-      - /nub.lock
-  test-unit:
+  test:
     command: nub exec vitest run
     deps:
       - ~:build
@@ -61,26 +44,11 @@ tasks:
       - tsconfig.json
       - vitest.config.ts
       - /nub.lock
-  test-e2e:
-    command: nub exec playwright test
-    deps:
-      - ~:build
-      - compose:up-d
-    inputs:
-      - "@group(browser)"
-      - src/**/*
-      - e2e/**/*
-      - playwright.config.ts
-      - tsconfig.playwright.json
-      - package.json
-      - /nub.lock
   check:
     deps:
       - ~:lint
       - ~:typecheck
-      - ~:typecheck-playwright
-      - ~:test-unit
-      - ~:test-e2e
+      - ~:test
     options:
       runInCI: false
     inputs: []
