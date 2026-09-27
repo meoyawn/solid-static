@@ -5,7 +5,7 @@
 ## Tools
 
 - use `nub` as package manager
-- use `nubx` to run binaries
+- use `nub exec` to run binaries
 
 ## Verification
 

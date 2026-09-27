@@ -244,17 +244,35 @@ When `src` contains image metadata, specifying only `width` or `height` infers t
 
 ## Development and CI
 
-Install Node.js 24, Nub 0.9, and Moon 2.5.5, then run:
+Install Node.js 24, Nub 0.9, Moon 2.5.5, and Docker with Compose, then run:
 
 ```sh
 nub install --frozen-lockfile
-nubx playwright install chromium
 moon run solid-static:check
 ```
 
 `moon.yml` owns the build, lint, typecheck, unit, and browser tasks. Tests depend
 on the package build because Vite fixtures resolve the package's exported runtime
 from `dist`. A clean checkout does not need prebuilt artifacts.
+
+Browser tests also depend on `compose:up-d`. The service in
+`compose/docker-compose.yaml` owns one Playwright server, its readiness check,
+and its lifetime. Its image installs Playwright and Chromium using the exact
+client version in `package.json`; no host browser or `node_modules` mount is
+needed. Compose uses host networking so the browser can reach test servers at
+their normal localhost URLs, without a proxy. This works on Linux and OrbStack;
+Docker Desktop 4.34 or newer needs host networking enabled in its settings.
+`compose/playwright.ts` reads the server's dynamically assigned loopback endpoint
+from the container. All workers share one Chromium process, with isolated contexts
+and tabs per test. Disconnecting closes only that connection's contexts; the
+browser and other workers keep running. A browser crash exits the service so
+Compose can restart it. A connection failure fails the test.
+
+The JavaScript and Node toolchains in `.moon/toolchains.yml` use Nub for package
+execution. Installation remains an explicit setup step, and tasks live only in
+`moon.yml`. Moon does not install a second package manager or manage a second
+Node version. The Nub toolchain names its official plugin explicitly because
+Moon 2.5.5 omits its default plugin location.
 
 The standalone GitHub workflow follows [Moon's CI guide](https://moonrepo.dev/docs/guides/ci):
 full Git history, dependency installation, then `moon ci` to select affected
@@ -264,8 +282,14 @@ Moon workspace cache.
 
 The same project tasks can be registered as `solid-static` in a parent Moon
 workspace. Consumers should depend on `solid-static:build` and use a workspace
-package dependency. The parent owns dependency and browser installation; the
-submodule's standalone workflow does not run inside the parent's workflow.
+package dependency. The parent owns dependency installation and provides
+`compose:up-d` by including this repository's `compose/docker-compose.yaml` in
+its own Compose project. Keep parent Playwright client versions aligned with
+this package. The submodule's standalone workflow does not run inside the
+parent's workflow.
+The parent can extend `.moon/toolchains.yml` from this package to share the
+same toolchain configuration. The `sources` file group covers package source
+and build configuration for consumers' cache inputs.
 
 To publish an explicitly approved release, use `moon run solid-static:publish`.
 

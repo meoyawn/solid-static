@@ -34,7 +34,6 @@ jobs:
         with:
           moon-version: "2.5.5"
       - run: nub install --frozen-lockfile
-      - run: nubx playwright install --with-deps chromium
       - name: Check affected tasks
         id: ci
         run: moon ci

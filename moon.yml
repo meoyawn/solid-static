@@ -1,17 +1,30 @@
+language: typescript
+layer: library
+stack: frontend
+tags: [node]
 toolchains:
-  default: system
+  default: node
+fileGroups:
+  browser:
+    - compose/**/*
+    - package.json
+  sources:
+    - src/**/*
+    - package.json
+    - tsconfig*.json
 tasks:
   lint:
-    command: nubx oxlint --config .oxlintrc.json src e2e playwright.config.ts
+    command: nub exec oxlint --config .oxlintrc.json src e2e compose playwright.config.ts
     inputs:
       - .oxlintrc.json
+      - compose/**/*.ts
       - src/**/*
       - e2e/**/*
       - playwright.config.ts
       - package.json
       - /nub.lock
   build:
-    command: nubx tsc -p tsconfig.build.json
+    command: nub exec tsc -p tsconfig.build.json
     inputs:
       - src/**/*
       - package.json
@@ -21,15 +34,16 @@ tasks:
     outputs:
       - dist/**/*
   typecheck:
-    command: nubx tsc
+    command: nub exec tsc
     inputs:
       - src/**/*
       - package.json
       - tsconfig.json
       - /nub.lock
   typecheck-playwright:
-    command: nubx tsc -p tsconfig.playwright.json
+    command: nub exec tsc -p tsconfig.playwright.json
     inputs:
+      - compose/**/*.ts
       - src/**/*
       - e2e/**/*
       - package.json
@@ -38,7 +52,7 @@ tasks:
       - tsconfig.playwright.json
       - /nub.lock
   test-unit:
-    command: nubx vitest run
+    command: nub exec vitest run
     deps:
       - ~:build
     inputs:
@@ -48,10 +62,12 @@ tasks:
       - vitest.config.ts
       - /nub.lock
   test-e2e:
-    command: nubx playwright test
+    command: nub exec playwright test
     deps:
       - ~:build
+      - compose:up-d
     inputs:
+      - "@group(browser)"
       - src/**/*
       - e2e/**/*
       - playwright.config.ts

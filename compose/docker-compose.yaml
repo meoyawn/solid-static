@@ -1,0 +1,24 @@
+name: solid-static
+
+services:
+  playwright:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile
+    init: true
+    restart: on-failure
+    shm_size: 1gb
+    network_mode: host
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch(require('node:fs').readFileSync('/tmp/playwright-endpoint', 'utf8').replace('ws:', 'http:'), { signal: AbortSignal.timeout(1000) })
+          .then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_interval: 1s
+      start_period: 20s
