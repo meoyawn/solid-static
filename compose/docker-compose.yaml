@@ -7,7 +7,7 @@ services:
       dockerfile: compose/Dockerfile
     init: true
     restart: on-failure
-    shm_size: 1gb
+    ipc: host
     network_mode: host
     healthcheck:
       test:

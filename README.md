@@ -259,7 +259,11 @@ Browser tests also depend on `compose:up-d`. The service in
 `compose/docker-compose.yaml` owns one Playwright server, its readiness check,
 and its lifetime. Its image installs Playwright and Chromium using the exact
 client version in `package.json`; no host browser or `node_modules` mount is
-needed. Compose uses host networking so the browser can reach test servers at
+needed. The runtime uses Debian slim and only Chromium's headless shell. Nub
+installs dependencies in a separate build stage, keeping its binaries and cache
+out of the runtime image. Compose enables `init` and host IPC following
+[Playwright's Docker recommendations](https://playwright.dev/docs/docker#recommended-docker-configuration).
+Compose uses host networking so the browser can reach test servers at
 their normal localhost URLs, without a proxy. This works on Linux and OrbStack;
 Docker Desktop 4.34 or newer needs host networking enabled in its settings.
 `compose/playwright.ts` reads the server's dynamically assigned loopback endpoint
