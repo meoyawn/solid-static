@@ -1,17 +1,24 @@
+language: typescript
+layer: library
+stack: frontend
+tags: [node]
 toolchains:
-  default: system
+  default: node
+fileGroups:
+  sources:
+    - src/**/*
+    - package.json
+    - tsconfig*.json
 tasks:
   lint:
-    command: nubx oxlint --config .oxlintrc.json src e2e playwright.config.ts
+    command: nub exec oxlint --config .oxlintrc.json src
     inputs:
       - .oxlintrc.json
       - src/**/*
-      - e2e/**/*
-      - playwright.config.ts
       - package.json
       - /nub.lock
   build:
-    command: nubx tsc -p tsconfig.build.json
+    command: nub exec tsc -p tsconfig.build.json
     inputs:
       - src/**/*
       - package.json
@@ -21,24 +28,14 @@ tasks:
     outputs:
       - dist/**/*
   typecheck:
-    command: nubx tsc
+    command: nub exec tsc
     inputs:
       - src/**/*
       - package.json
       - tsconfig.json
       - /nub.lock
-  typecheck-playwright:
-    command: nubx tsc -p tsconfig.playwright.json
-    inputs:
-      - src/**/*
-      - e2e/**/*
-      - package.json
-      - playwright.config.ts
-      - tsconfig.json
-      - tsconfig.playwright.json
-      - /nub.lock
-  test-unit:
-    command: nubx vitest run
+  test:
+    command: nub exec vitest run
     deps:
       - ~:build
     inputs:
@@ -47,24 +44,11 @@ tasks:
       - tsconfig.json
       - vitest.config.ts
       - /nub.lock
-  test-e2e:
-    command: nubx playwright test
-    deps:
-      - ~:build
-    inputs:
-      - src/**/*
-      - e2e/**/*
-      - playwright.config.ts
-      - tsconfig.playwright.json
-      - package.json
-      - /nub.lock
   check:
     deps:
       - ~:lint
       - ~:typecheck
-      - ~:typecheck-playwright
-      - ~:test-unit
-      - ~:test-e2e
+      - ~:test
     options:
       runInCI: false
     inputs: []

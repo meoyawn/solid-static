@@ -248,13 +248,25 @@ Install Node.js 24, Nub 0.9, and Moon 2.5.5, then run:
 
 ```sh
 nub install --frozen-lockfile
-nubx playwright install chromium
 moon run solid-static:check
 ```
 
-`moon.yml` owns the build, lint, typecheck, unit, and browser tasks. Tests depend
+`moon.yml` owns the build, lint, typecheck, and Vitest tasks. Tests depend
 on the package build because Vite fixtures resolve the package's exported runtime
 from `dist`. A clean checkout does not need prebuilt artifacts.
+
+All tests run in Node without a browser or Docker. Integrated Vite fixtures build
+real sites, then Cheerio, PostCSS, and Acorn check generated HTML, CSS, and
+JavaScript: static fallback content, hashed links, stylesheet deduplication,
+page-specific styles, shared chunks, and root, relative, subpath, and CDN bases.
+Development tests request Vite's HTML and transformed assets directly over HTTP.
+Each fixture owns its temporary files and ephemeral ports.
+
+The JavaScript and Node toolchains in `.moon/toolchains.yml` use Nub for package
+execution. Installation remains an explicit setup step, and tasks live only in
+`moon.yml`. Moon does not install a second package manager or manage a second
+Node version. The Nub toolchain names its official plugin explicitly because
+Moon 2.5.5 omits its default plugin location.
 
 The standalone GitHub workflow follows [Moon's CI guide](https://moonrepo.dev/docs/guides/ci):
 full Git history, dependency installation, then `moon ci` to select affected
@@ -264,8 +276,11 @@ Moon workspace cache.
 
 The same project tasks can be registered as `solid-static` in a parent Moon
 workspace. Consumers should depend on `solid-static:build` and use a workspace
-package dependency. The parent owns dependency and browser installation; the
-submodule's standalone workflow does not run inside the parent's workflow.
+package dependency. The parent owns dependency installation. The submodule's
+standalone workflow does not run inside the parent's workflow.
+The parent can extend `.moon/toolchains.yml` from this package to share the
+same toolchain configuration. The `sources` file group covers package source
+and build configuration for consumers' cache inputs.
 
 To publish an explicitly approved release, use `moon run solid-static:publish`.
 

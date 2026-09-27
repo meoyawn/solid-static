@@ -34,7 +34,6 @@ jobs:
         with:
           moon-version: "2.5.5"
       - run: nub install --frozen-lockfile
-      - run: nubx playwright install --with-deps chromium
       - name: Check affected tasks
         id: ci
         run: moon ci
@@ -53,10 +52,3 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: test-results-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 1
