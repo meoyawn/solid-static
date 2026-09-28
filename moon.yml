@@ -11,31 +11,31 @@ fileGroups:
     - tsconfig*.json
 tasks:
   lint:
-    command: nub exec oxlint --config .oxlintrc.json src
+    command: aube exec oxlint --config .oxlintrc.json src
     inputs:
       - .oxlintrc.json
       - src/**/*
       - package.json
-      - /nub.lock
+      - /aube-lock.yaml
   build:
-    command: nub exec tsc -p tsconfig.build.json
+    command: aube exec tsc -p tsconfig.build.json
     inputs:
       - src/**/*
       - package.json
       - tsconfig.json
       - tsconfig.build.json
-      - /nub.lock
+      - /aube-lock.yaml
     outputs:
       - dist/**/*
   typecheck:
-    command: nub exec tsc
+    command: aube exec tsc
     inputs:
       - src/**/*
       - package.json
       - tsconfig.json
-      - /nub.lock
+      - /aube-lock.yaml
   test:
-    command: nub exec vitest run
+    command: aube exec vitest run
     deps:
       - ~:build
     inputs:
@@ -43,7 +43,7 @@ tasks:
       - package.json
       - tsconfig.json
       - vitest.config.ts
-      - /nub.lock
+      - /aube-lock.yaml
   check:
     deps:
       - ~:lint
@@ -53,7 +53,7 @@ tasks:
       runInCI: false
     inputs: []
   publish:
-    command: nub publish --access public
+    command: aube publish --access public
     deps:
       - ~:check
       - ~:build

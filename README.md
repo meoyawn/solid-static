@@ -9,7 +9,7 @@ Read the introduction: [Another static site generator](https://adelnz.com/writin
 Install from npm:
 
 ```sh
-nub add solid-static
+aube add solid-static
 ```
 
 ## Setup
@@ -244,10 +244,10 @@ When `src` contains image metadata, specifying only `width` or `height` infers t
 
 ## Development and CI
 
-Install Node.js 24, Nub 0.9, and Moon 2.5.5, then run:
+Install Node.js 24, Aube 2.5.1, and Moon 2.5.5, then run:
 
 ```sh
-nub install --frozen-lockfile
+aube install --frozen-lockfile
 moon run solid-static:check
 ```
 
@@ -262,11 +262,10 @@ page-specific styles, shared chunks, and root, relative, subpath, and CDN bases.
 Development tests request Vite's HTML and transformed assets directly over HTTP.
 Each fixture owns its temporary files and ephemeral ports.
 
-The JavaScript and Node toolchains in `.moon/toolchains.yml` use Nub for package
-execution. Installation remains an explicit setup step, and tasks live only in
-`moon.yml`. Moon does not install a second package manager or manage a second
-Node version. The Nub toolchain names its official plugin explicitly because
-Moon 2.5.5 omits its default plugin location.
+Moon 2.5.5 has no native Aube package-manager integration. Tasks in `moon.yml`
+invoke `aube exec` explicitly, and installation remains a separate setup step.
+The JavaScript and Node toolchains provide project metadata and use the system
+Node.js without installing another package manager or Node version.
 
 The standalone GitHub workflow follows [Moon's CI guide](https://moonrepo.dev/docs/guides/ci):
 full Git history, dependency installation, then `moon ci` to select affected

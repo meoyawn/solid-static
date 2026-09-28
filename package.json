@@ -75,8 +75,8 @@
   },
   "devEngines": {
     "packageManager": {
-      "name": "nub",
-      "version": "^0.9.0",
+      "name": "aube",
+      "version": "2.5.1",
       "onFail": "warn"
     }
   }
