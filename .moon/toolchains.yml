@@ -1,11 +1,6 @@
-# Installation and Node selection belong to Nub and the workspace setup.
-# Share package-aware task execution with workspaces consuming this repository.
+# Aube owns installation; Moon runs explicit commands with the system Node.js.
 javascript:
-  packageManager: nub
   inferTasksFromScripts: false
   syncPackageManagerField: false
   syncProjectWorkspaceDependencies: false
 node: {}
-unstable_nub:
-  # Moon 2.5.5 omits Nub from default locator inheritance.
-  plugin: https://github.com/moonrepo/plugins/releases/download/node_depman_toolchain-v1.1.0/node_depman_toolchain.wasm

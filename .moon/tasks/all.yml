@@ -1,8 +1,8 @@
 implicitInputs:
   - moon.yml
   - /package.json
-  - /nub.lock
+  - /aube-lock.yaml
   - glob: /.node-version
-  - glob: /nub.jsonc
+  - glob: /aube-workspace.yaml
   - /.moon/**/*.yml
   - /.github/workflows/ci.yaml

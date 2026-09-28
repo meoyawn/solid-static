@@ -4,8 +4,8 @@
 
 ## Tools
 
-- use `nub` as package manager
-- use `nub exec` to run binaries
+- use `aube` as package manager
+- use `aube exec` to run binaries
 
 ## Verification
 
