@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises"
-import { extname, join, relative } from "node:path"
+import { extname, join, relative, resolve } from "node:path"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
@@ -34,6 +34,7 @@ export type CollectionDefinitions = Record<string, CollectionDefinition>
 export interface CollectionEntry<TData = unknown> {
   body?: string | undefined
   data: TData
+  filePath: string
   id: string
   rendered?: RenderedMarkdown | undefined
 }
@@ -130,7 +131,7 @@ const loadCollection = async (
       const parsed = parseSource(await readFile(filePath, "utf8"), relativePath)
       const data = definition.schema?.(parsed.data, relativePath) ?? parsed.data
       const rendered =
-        parsed.renderable && markdownProcessor !== undefined
+        extname(filePath) === ".md" && markdownProcessor !== undefined
           ? await markdownProcessor.process({ path: filePath, value: parsed.body })
           : undefined
 
@@ -149,6 +150,7 @@ const loadCollection = async (
             }
           : {}),
         data,
+        filePath: resolve(filePath),
         id,
       }
     }),

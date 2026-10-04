@@ -1,6 +1,6 @@
 import type { Component, JSX } from "solid-js"
 import { renderToString } from "solid-js/web"
-import type { LoadedCollections } from "./content.ts"
+import type { LoadedCollections, MarkdownHeading } from "./content.ts"
 import { setCollections } from "./runtime.ts"
 
 export interface PageRoute {
@@ -60,6 +60,31 @@ interface StaticSiteRoute {
 }
 
 const withDoctype = (html: string): string => `<!doctype html>${html}`
+
+export function renderMdxCollections(
+  collections: LoadedCollections,
+  documents: {
+    collection: string
+    id: string
+    Content: Component
+    headings: MarkdownHeading[]
+  }[],
+): void {
+  setCollections(collections)
+  for (const document of documents) {
+    const entry = collections[document.collection]?.find(
+      candidate => candidate.id === document.id,
+    )
+    if (entry === undefined) {
+      throw new TypeError(`Unknown MDX collection entry ${document.collection}/${document.id}`)
+    }
+    const Content = document.Content
+    entry.rendered = {
+      html: renderToString(() => <Content />),
+      headings: document.headings,
+    }
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)

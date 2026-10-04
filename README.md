@@ -101,6 +101,18 @@ the HTML a second time:
 Custom Markdown processors can provide the same metadata through their result's
 `data.headings`. Results without heading metadata produce an empty headings list.
 
+Content collections can include `.mdx` files with a pattern such as `/\.mdx?$/`.
+Use `solidMarkdown()` in `integrations`: Vite compiles MDX imports, components,
+and `?island` entries, then renders collection HTML and heading metadata before
+page generation. Render an MDX collection entry with `innerHTML={entry.rendered.html}`
+just like a Markdown entry; its module scripts become browser island assets.
+
+`loadCollections()` exposes each entry's absolute `filePath` and loads its
+frontmatter and body. Standalone loading does not compile MDX; MDX entries gain
+`rendered` during Vite page generation. Plain `.md` files use the configured
+Markdown processor. To apply the same extra rehype plugins to compiled MDX,
+pass them to `solidMarkdown({ rehypePlugins: [...] })`.
+
 ### Client islands
 
 Import a self-mounting browser entry with the `?island` query, then reference the returned URL from a module script. The page remains static HTML; only the named entry and its imports are compiled for the browser.
@@ -143,6 +155,15 @@ Use `client` to configure the clean nested browser build explicitly. It accepts
 Vite configuration such as aliases, defines, mode, CSS options, browser-only
 plugins, and build target or minification settings. Server integrations are not
 forwarded automatically.
+
+The same `?island` import works directly in an MDX page or collection body:
+
+```mdx
+import downloadIsland from "../app/download.ts?island";
+
+<a data-download href="/downloads/">View downloads</a>
+<script type="module" src={downloadIsland} />
+```
 
 ```ts
 staticSite({

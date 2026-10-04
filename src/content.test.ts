@@ -44,6 +44,7 @@ describe("content collections", () => {
           {
             body: "Article\n",
             data: { published_at: new Date("2026-05-29T00:00:00.000Z") },
+            filePath: join(directory, "article.md"),
             id: "article",
           },
         ],

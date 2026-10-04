@@ -1,4 +1,5 @@
 import mdx from "@mdx-js/rollup"
+import type { Program } from "estree"
 import GithubSlugger, { slug as githubSlug } from "github-slugger"
 import type { Root as HastRoot } from "hast"
 import { toString } from "hast-util-to-string"
@@ -9,7 +10,7 @@ import remarkFrontmatter from "remark-frontmatter"
 import remarkMdxFrontmatter from "remark-mdx-frontmatter"
 import remarkRehype from "remark-rehype"
 import rehypeStringify from "rehype-stringify"
-import { type Plugin, unified } from "unified"
+import { type Plugin, type PluggableList, unified } from "unified"
 import { visit } from "unist-util-visit"
 import type { PluginOption } from "vite"
 import type { MarkdownHeading } from "./content.ts"
@@ -66,10 +67,49 @@ export const createMarkdownProcessor = () =>
 export const createHtmlMarkdownProcessor = () =>
   createMarkdownProcessor().use(rehypeStringify)
 
-export const solidMarkdown = (): PluginOption =>
+const recmaHeadings: Plugin<[], Program> = function () {
+  return function (tree, file) {
+    tree.body.push({
+      type: "ExportNamedDeclaration",
+      specifiers: [],
+      source: null,
+      attributes: [],
+      declaration: {
+        type: "VariableDeclaration",
+        kind: "const",
+        declarations: [
+          {
+            type: "VariableDeclarator",
+            id: { type: "Identifier", name: "headings" },
+            init: {
+              type: "ArrayExpression",
+              elements: (file.data.headings ?? []).map(heading => ({
+                type: "ObjectExpression",
+                properties: Object.entries(heading).map(([key, value]) => ({
+                  type: "Property",
+                  key: { type: "Identifier", name: key },
+                  value: { type: "Literal", value },
+                  kind: "init",
+                  method: false,
+                  shorthand: false,
+                  computed: false,
+                })),
+              })),
+            },
+          },
+        ],
+      },
+    })
+  }
+}
+
+export const solidMarkdown = (
+  options: { rehypePlugins?: PluggableList } = {},
+): PluginOption =>
   mdx({
     jsxImportSource: "solid-jsx",
-    rehypePlugins: [rehypeHeadings],
+    rehypePlugins: [rehypeHeadings, ...(options.rehypePlugins ?? [])],
+    recmaPlugins: [recmaHeadings],
     remarkPlugins: [
       remarkFrontmatter,
       [remarkMdxFrontmatter, { name: "frontmatter" }],

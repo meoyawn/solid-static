@@ -568,16 +568,33 @@ const virtualEntry = async (
       entries,
     ]),
   )
+  const mdxEntries = Object.entries(collections).flatMap(
+    ([collection, entries]) => entries
+      .filter(entry => extname(entry.filePath) === ".mdx")
+      .map(entry => ({ collection, entry })),
+  )
+  const collectionImports = mdxEntries
+    .map(({ entry }, index) =>
+      `import * as CollectionDocument${index} from ${JSON.stringify(entry.filePath)}`,
+    )
+    .join("\n")
+  const collectionDocuments = mdxEntries
+    .map(({ collection, entry }, index) =>
+      `{ collection: ${JSON.stringify(collection)}, id: ${JSON.stringify(entry.id)}, Content: CollectionDocument${index}.default, headings: CollectionDocument${index}.headings }`,
+    )
+    .join(",\n")
 
   return `
-import { renderStaticSite } from ${JSON.stringify(rendererPath)}
+import { renderStaticSite, renderMdxCollections } from ${JSON.stringify(rendererPath)}
 import { setCollections } from "solid-static/runtime"
 ${pageImports}
 ${componentImports}
+${collectionImports}
 
 export default async function generateStaticSite() {
   const collections = ${serialize(collectionValues)}
   setCollections(collections)
+  renderMdxCollections(collections, [${collectionDocuments}])
 
   return renderStaticSite({
     collections,
