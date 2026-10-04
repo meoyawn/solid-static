@@ -33,6 +33,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
+    },
+    "./satori": {
+      "types": "./dist/satori.d.ts",
+      "default": "./dist/satori.js"
     }
   },
   "peerDependencies": {
@@ -49,6 +53,7 @@
     "remark-frontmatter": "^5.0.0",
     "remark-mdx-frontmatter": "^5.2.0",
     "remark-rehype": "^11.1.2",
+    "satori": "^0.35.0",
     "sharp": "^0.35.3",
     "solid-jsx": "^1.1.4",
     "turndown": "^7.2.4",

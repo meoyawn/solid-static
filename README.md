@@ -263,6 +263,66 @@ export default function Page() {
 
 When `src` contains image metadata, specifying only `width` or `height` infers the other dimension while preserving the aspect ratio. The returned promise resolves to a `GetImageResult` containing the generated `src`, inferred `attributes`, normalized `options`, original `rawOptions`, and an Astro-compatible `srcSet` object. Generated URLs work in both the Vite development server and production builds. `getImage()` throws if called in the browser.
 
+### Satori social images
+
+Keep parameterized social-card layouts in `*.satori.tsx` files. `staticSite()`
+compiles these files with Satori's JSX runtime, separately from Solid pages;
+they never become routes, even when colocated under `src/pages`.
+
+```tsx
+/* @jsxImportSource satori/jsx */
+import type { JSX } from "satori/jsx";
+
+export default function SocialCard(props: { title: string }): JSX.Element {
+  return (
+    <div style={{ display: "flex", width: "100%", height: "100%", padding: 64, backgroundColor: "white", fontSize: 72, fontFamily: "Inter" }}>
+      {props.title}
+    </div>
+  );
+}
+```
+
+Call `getSatoriImage()` from a page or layout during server rendering. Unlike
+`getImage()`, it is synchronous, so props can supply the card content directly:
+
+```tsx
+import { createMemo } from "solid-js";
+import { getSatoriImage } from "solid-static/satori";
+import font from "./assets/inter-bold.woff?url&no-inline";
+import SocialCard from "./social-card.satori.tsx";
+
+export default function Page(props: { title: string }) {
+  const image = createMemo(() => getSatoriImage({
+    element: SocialCard({ title: props.title }),
+    fonts: [{ name: "Inter", src: font, weight: 700 }],
+    width: 1200,
+    height: 630,
+  }));
+  return (
+    <html>
+      <head>
+        <meta property="og:image" content={image().src} />
+        <meta name="twitter:image" content={image().src} />
+      </head>
+      <body>{props.title}</body>
+    </html>
+  );
+}
+```
+
+The result contains `src`, `width`, and `height`. The build renders the template
+with local TTF, OTF, or WOFF fonts, rasterizes it with Sharp, emits a PNG under
+the configured assets directory, and replaces image references in the final
+HTML. Identical cards share one file; the filename hashes the rendered bytes,
+so content, layout, logo, or font changes produce a new URL. The same renderer
+serves previews in development. Missing fonts and rendering failures fail the
+build instead of silently substituting another card. Templates must return
+serializable intrinsic elements; render nested custom components before passing
+the element to `getSatoriImage()`. Embed imported images as data URLs to keep
+rendering independent of external image hosts. Font imports here are renderer
+inputs and do not install browser fonts or add a font stylesheet to pages.
+Font files used only by the renderer are removed from the final bundle.
+
 ## Development and CI
 
 Install Node.js 24, Aube 2.5.1, and Moon 2.5.5, then run:

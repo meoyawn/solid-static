@@ -27,6 +27,7 @@ import {
   type StaticSiteMarkdownExportOptions,
 } from "./markdown-export.ts"
 import { responsiveImages } from "./responsive-images.ts"
+import { satoriImages } from "./satori-images.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -401,6 +402,7 @@ const discoverPages = async (
     .filter(
       entry =>
         entry.isFile() &&
+        !entry.name.endsWith(".satori.tsx") &&
         pageExtensions.has(extname(entry.name)),
     )
     .map(entry => join(entry.parentPath, entry.name))
@@ -957,8 +959,9 @@ export const staticSite = (options: StaticSiteOptions): PluginOption => {
   return [
     ...options.integrations,
     clientIslands.plugin,
-    solid({ ssr: true }),
+    solid({ ssr: true, exclude: /\.satori\.tsx$/ }),
     staticSitePlugin(options, clientIslands),
     responsiveImages(),
+    satoriImages(),
   ]
 }
