@@ -323,6 +323,33 @@ rendering independent of external image hosts. Font imports here are renderer
 inputs and do not install browser fonts or add a font stylesheet to pages.
 Font files used only by the renderer are removed from the final bundle.
 
+## Building from a CLI
+
+Solid Static is a Vite plugin. Use Vite's existing command surface with the
+configuration above; no separate Solid Static CLI is needed:
+
+```sh
+aube exec vite build
+aube exec vite build --outDir public-site
+```
+
+For a data-driven site, let the template project own its data contract,
+dependencies, build command, and deployment artifact. A self-contained Bun
+executable can embed an archive of that project and its installed dependencies
+(including Vite's native dependencies). At runtime, extract into an isolated
+working directory, supply the content data, and invoke `vite build` using the
+embedded Bun runtime (`BUN_BE_BUN=1` and the executable's own path). Upload the
+result and remove the working directory. This avoids requiring Node.js, Bun,
+source checkouts, or package installation on the deployment machine while
+preserving Vite's normal plugin and package resolution.
+
+See Bun's [single-file executable documentation](https://bun.com/docs/bundler/executables)
+and [archive API](https://bun.com/docs/runtime/archive). Package the complete
+runtime dependency graph and the correct native packages for the target OS and
+architecture. Test the artifact away from the source tree, with no network or
+installed JavaScript runtime. Rebuild the artifact when templates or dependency
+versions change; content changes only need new input data.
+
 ## Development and CI
 
 Install Node.js 24, Aube 2.5.1, and Moon 2.5.5, then run:
