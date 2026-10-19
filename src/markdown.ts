@@ -15,12 +15,6 @@ import { visit } from "unist-util-visit"
 import type { PluginOption } from "vite"
 import type { MarkdownHeading } from "./content.ts"
 
-declare module "vfile" {
-  interface DataMap {
-    headings: MarkdownHeading[]
-  }
-}
-
 const rehypeHeadings: Plugin<[], HastRoot> = function () {
   return function (tree, file) {
     const slugger = new GithubSlugger()

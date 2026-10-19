@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { extname, join, relative, resolve } from "node:path"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
+import type { Data } from "vfile"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -10,6 +11,12 @@ export interface MarkdownHeading {
   text: string
 }
 
+declare module "vfile" {
+  interface DataMap {
+    headings: MarkdownHeading[]
+  }
+}
+
 export interface RenderedMarkdown {
   html: string
   headings: MarkdownHeading[]
@@ -17,7 +24,7 @@ export interface RenderedMarkdown {
 
 export interface MarkdownProcessor {
   process(file: { path: string; value: string }): Promise<{
-    data?: { headings?: MarkdownHeading[] | undefined } | undefined
+    data?: Data | undefined
     toString(): string
   }>
 }
