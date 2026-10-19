@@ -5,6 +5,9 @@
   "files": [
     "dist"
   ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.build.json"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

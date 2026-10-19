@@ -119,7 +119,7 @@ export const markdownImages = (
     const body = match.groups.body
     const images = await findMarkdownImages(body, sourcePath)
     const prepared = replaceMarkdownImages(body, images, (_image, index) => `SOLIDSTATICIMAGE${index}END`)
-    const rendered = String(await processor.process({ path: sourcePath, value: prepared }))
+    const rendered = await processor.process({ path: sourcePath, value: prepared })
 
     return `
 import { createComponent } from "solid-js"
@@ -127,7 +127,8 @@ import { renderToString, ssr } from "solid-js/web"
 import { ResponsiveImage } from ${JSON.stringify(imageComponentPath)}
 ${images.map((image, index) => `import MarkdownImage${index} from ${JSON.stringify(`${image.filePath}?no-inline`)}`).join("\n")}
 export const frontmatter = ${serialize(frontmatter)}
-let html = ${serialize(rendered)}
+export const headings = ${serialize(rendered.data?.headings ?? [])}
+let html = ${serialize(String(rendered))}
 ${images.map((image, index) => `html = html.replaceAll("SOLIDSTATICIMAGE${index}END", renderToString(() => createComponent(ResponsiveImage, { ...${serialize(image.props)}, src: MarkdownImage${index} })))`).join("\n")}
 export default () => ssr(html)
 `

@@ -192,6 +192,10 @@ Page components and Markdown or MDX layouts receive a `route` prop. `route.path`
 
 ### Responsive images
 
+Git dependencies run the package's `prepare` script to build `dist/` before
+packing. Pin the Git commit for reproducible installs; no globally installed
+TypeScript compiler or Moon executable is needed for that build.
+
 Local images in Markdown pages and content collections use the image pipeline
 automatically. Keep the source image beside the Markdown file and use ordinary
 Markdown syntax, including reference-style images:
