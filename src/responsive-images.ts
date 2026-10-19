@@ -228,7 +228,7 @@ const sourceAsset = (
   bundle: Record<string, unknown>,
   sourceUrl: string,
 ): ImageSourceAsset => {
-  const fileName = sourceUrl.replace(/^\//, "")
+  const fileName = decodeURIComponent(sourceUrl.replace(/^\//, ""))
   const asset = bundle[fileName]
 
   if (!isImageSourceAsset(asset)) {
@@ -277,7 +277,7 @@ const devSourcePath = (config: ResolvedConfig, sourceUrl: string): string => {
     throw new TypeError(`Unsupported responsive dev image ${sourceUrl}`)
   }
 
-  return join(config.root, pathname)
+  return join(config.root, decodeURIComponent(pathname))
 }
 
 const replaceGeneratedImages = async (
@@ -309,7 +309,7 @@ const replaceGeneratedImages = async (
 
 const publicAssetPath = (base: string, fileName: string): string => {
   const pathBase = base.startsWith("/") ? base : "/"
-  return `${pathBase}${fileName}`.replace(/\/{2,}/g, "/")
+  return encodeURI(`${pathBase}${fileName}`.replace(/\/{2,}/g, "/"))
 }
 
 export const responsiveImages = (): Plugin => {
@@ -327,7 +327,7 @@ export const responsiveImages = (): Plugin => {
     }
 
     const operation = readFile(devSourcePath(config, sourceUrl)).then(source =>
-      createImagePipeline(source, sourceUrl),
+      createImagePipeline(source, decodeURIComponent(sourceUrl)),
     )
 
     devPipelines.set(sourceUrl, operation)
@@ -398,7 +398,7 @@ export const responsiveImages = (): Plugin => {
           processImage(
             pipeline,
             request,
-            name => `/@solid-static/images/${name}`,
+            name => encodeURI(`/@solid-static/images/${name}`),
           ).then(image => {
             for (const variant of image.variants) {
               devAssets.set(variant.url, variant.content)
@@ -420,7 +420,7 @@ export const responsiveImages = (): Plugin => {
         const operation = devPipelineFor(request.sourceUrl).then(
           async pipeline => {
             const image = await pipeline.transform(request)
-            const url = `/@solid-static/images/${image.name}`
+            const url = encodeURI(`/@solid-static/images/${image.name}`)
 
             devAssets.set(url, image.content)
             return {
@@ -552,7 +552,8 @@ export const responsiveImages = (): Plugin => {
           output =>
             output.type === "asset" &&
             output.fileName !== fileName &&
-            output.source.toString().includes(`/${fileName}`),
+            (output.source.toString().includes(`/${fileName}`) ||
+              output.source.toString().includes(publicAssetPath(config.base, fileName))),
         )
 
         if (!remainsReferenced) {

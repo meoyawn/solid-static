@@ -28,6 +28,13 @@ import {
 } from "./markdown-export.ts"
 import { responsiveImages } from "./responsive-images.ts"
 import { satoriImages } from "./satori-images.ts"
+import {
+  findMarkdownImages,
+  imageComponentPath,
+  markdownImages,
+  replaceMarkdownImages,
+  type MarkdownImage,
+} from "./markdown-images.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -509,10 +516,25 @@ const serialize = (value: unknown): string => {
 const virtualEntry = async (
   options: ResolvedStaticSiteOptions,
 ): Promise<string> => {
+  const images: (MarkdownImage & { token: string })[] = []
   const collections = await loadCollections(
     options.collections,
-    options.markdown.processor,
+    {
+      async process(file) {
+        const localImages = await findMarkdownImages(file.value, file.path)
+        const prepared = localImages.map(image => ({
+          ...image,
+          token: `SOLIDSTATICIMAGE${createHash("sha256").update(`${file.path}:${image.start}`).digest("hex")}`,
+        }))
+        images.push(...prepared)
+        return options.markdown.processor.process({
+          path: file.path,
+          value: replaceMarkdownImages(file.value, localImages, (_image, index) => prepared[index]?.token ?? ""),
+        })
+      },
+    },
   )
+  images.sort((left, right) => left.token.localeCompare(right.token))
   const pages = await discoverPages(options)
   const documentPages = pages.filter(isDocumentPage)
   const componentPages = pages.filter(isComponentPage)
@@ -589,12 +611,26 @@ const virtualEntry = async (
   return `
 import { renderStaticSite, renderMdxCollections } from ${JSON.stringify(rendererPath)}
 import { setCollections } from "solid-static/runtime"
+import { createComponent } from "solid-js"
+import { renderToString } from "solid-js/web"
+import { ResponsiveImage } from ${JSON.stringify(imageComponentPath)}
+${images.map((image, index) => `import MarkdownImage${index} from ${JSON.stringify(`${image.filePath}?no-inline`)}`).join("\n")}
 ${pageImports}
 ${componentImports}
 ${collectionImports}
 
 export default async function generateStaticSite() {
   const collections = ${serialize(collectionValues)}
+  const images = [${images.map((image, index) => `[${JSON.stringify(image.token)}, renderToString(() => createComponent(ResponsiveImage, { ...${serialize(image.props)}, src: MarkdownImage${index} }))]`).join(",\n")}]
+  for (const entries of Object.values(collections)) {
+    for (const entry of entries) {
+      if (entry.rendered !== undefined) {
+        for (const [token, image] of images) {
+          entry.rendered.html = entry.rendered.html.replaceAll(token, image)
+        }
+      }
+    }
+  }
   setCollections(collections)
   renderMdxCollections(collections, [${collectionDocuments}])
 
@@ -957,6 +993,7 @@ export const staticSite = (options: StaticSiteOptions): PluginOption => {
   const clientIslands = createClientIslands(options.client)
 
   return [
+    markdownImages(options.markdown.processor, serialize),
     ...options.integrations,
     clientIslands.plugin,
     solid({ ssr: true, exclude: /\.satori\.tsx$/ }),

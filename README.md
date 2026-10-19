@@ -192,6 +192,21 @@ Page components and Markdown or MDX layouts receive a `route` prop. `route.path`
 
 ### Responsive images
 
+Local images in Markdown pages and content collections use the image pipeline
+automatically. Keep the source image beside the Markdown file and use ordinary
+Markdown syntax, including reference-style images:
+
+```md
+![Process monitor showing the application's memory use](./processes.png)
+```
+
+Solid Static resolves the image relative to the Markdown source, imports it
+through Vite, infers its dimensions, and renders it through `ResponsiveImage`.
+Development and production output include WebP variants and a responsive
+`srcset`; production URLs contain content hashes. This also works with a custom
+collection Markdown processor, without an extra integration. Remote URLs,
+data URLs, and root-relative public image URLs are left unchanged.
+
 Import an image through Vite, then render it with `ResponsiveImage` in a SolidJS page or component:
 
 ```tsx
