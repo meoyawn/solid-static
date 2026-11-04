@@ -23,6 +23,9 @@ importers:
       mdast-util-from-markdown:
         specifier: ^2.0.3
         version: 2.0.3
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
       rehype-stringify:
         specifier: ^10.0.1
         version: 10.0.1

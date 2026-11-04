@@ -4,6 +4,7 @@ import {
   request as createHttpRequest,
 } from "node:http"
 import { join } from "node:path"
+import { load as loadHtml } from "cheerio"
 import { describe, expect, test } from "vitest"
 import { build, createServer as createViteServer } from "vite"
 import { staticSite } from "./index.ts"
@@ -25,7 +26,14 @@ describe("PageRoute Vite rendering", () => {
       const pagesDirectory = join(root, "src", "pages")
       const routeComponent = `
 export default (props: { route: { fileName: string; path: string } }) =>
-  <output>{props.route.path}|{props.route.fileName}</output>
+  <html>
+    <head>
+      <meta property="og:title" content="Route fixture" />
+      <meta property="og:image" content="/preview.png?width=1200&amp;height=630" />
+      <meta name="twitter:image" content="../preview.png" />
+    </head>
+    <body><output>{props.route.path}|{props.route.fileName}</output></body>
+  </html>
 `
       const layoutComponent = `
 import type { JSX } from "solid-js"
@@ -35,6 +43,10 @@ export default (props: {
   route: { fileName: string; path: string }
 }) => (
   <html>
+    <head>
+      <meta property="og:title" content="Document fixture" />
+      <meta property="og:url" content="/reference-canonical/" />
+    </head>
     <body>
       <output>{props.route.path}|{props.route.fileName}</output>
       <main>{props.children}</main>
@@ -54,6 +66,7 @@ export default (props: {
             },
             integrations: [solidMarkdown()],
             markdown: { processor: createHtmlMarkdownProcessor() },
+            sitemap: { site: "https://example.com" },
             trailingSlash,
           }),
         ]
@@ -70,6 +83,28 @@ export default (props: {
         }
 
         return route
+      }
+
+      function checkSocialMetadata(html: string, path: string): void {
+        const $ = loadHtml(html)
+        const pageUrl = new URL(path, "https://example.com")
+        const openGraphUrl = $('meta[property="og:url"]')
+
+        expect(openGraphUrl.length).toEqual(1)
+        expect(openGraphUrl.attr("content")).toEqual(
+          path.startsWith("/reference")
+            ? "https://example.com/reference-canonical/"
+            : pageUrl.href,
+        )
+
+        if (!path.startsWith("/reference")) {
+          expect($('meta[property="og:image"]').attr("content")).toEqual(
+            "https://example.com/preview.png?width=1200&height=630",
+          )
+          expect($('meta[name="twitter:image"]').attr("content")).toEqual(
+            new URL("../preview.png", pageUrl).href,
+          )
+        }
       }
 
       async function requestPage(
@@ -156,10 +191,15 @@ export default (props: {
                 ["404.html", "/404|404.html"],
               ]
         const productionRoutes = await Promise.all(
-          expected.map(async ([fileName]) => [
-            fileName,
-            renderedRoute(await readFile(join(root, "dist", fileName), "utf8")),
-          ]),
+          expected.map(async ([fileName, route]) => {
+            const html = await readFile(join(root, "dist", fileName), "utf8")
+
+            if (fileName !== "404.html") {
+              checkSocialMetadata(html, route.split("|")[0] ?? "")
+            }
+
+            return [fileName, renderedRoute(html)]
+          }),
         )
         const referenceFileName =
           trailingSlash === "always"
@@ -208,6 +248,7 @@ export default (props: {
           const developmentRoutes = await Promise.all(
             requestPaths.map(async path => {
               const response = await requestPage(address.port, path)
+              checkSocialMetadata(response.body, path)
               return renderedRoute(response.body)
             }),
           )

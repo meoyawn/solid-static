@@ -52,6 +52,7 @@
     "hast-util-to-string": "^3.0.1",
     "js-yaml": "^5.2.3",
     "mdast-util-from-markdown": "^2.0.3",
+    "parse5": "^7.3.0",
     "rehype-stringify": "^10.0.1",
     "remark-frontmatter": "^5.0.0",
     "remark-mdx-frontmatter": "^5.2.0",

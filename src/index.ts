@@ -27,6 +27,7 @@ import {
   type StaticSiteMarkdownExportOptions,
 } from "./markdown-export.ts"
 import { responsiveImages } from "./responsive-images.ts"
+import { withPageMetadata } from "./page-metadata.ts"
 import { satoriImages } from "./satori-images.ts"
 import {
   findMarkdownImages,
@@ -301,6 +302,20 @@ const publicPathForFileName = (
   }
 
   return undefined
+}
+
+function withRouteMetadata(
+  route: StaticSiteRoute,
+  options: ResolvedStaticSiteOptions,
+): string {
+  const path = publicPathForFileName(route.fileName, options.trailingSlash)
+
+  if (options.sitemap === undefined || path === undefined) {
+    return route.html
+  }
+
+  const site = options.sitemap.site.replace(/\/+$/, "")
+  return withPageMetadata(route.html, new URL(`${site}${path}`).href)
 }
 
 export const createSitemap = (
@@ -718,7 +733,10 @@ const serveStaticSite = (
         throw new TypeError("Vite loaded an invalid static-site module")
       }
 
-      return requireRoutes(await module.default())
+      return requireRoutes(await module.default()).map(route => ({
+        ...route,
+        html: withRouteMetadata(route, options),
+      }))
     })
 
     return routesPromise
@@ -915,7 +933,10 @@ const staticSitePlugin = (
         throw new TypeError("Vite emitted an invalid static-site module")
       }
 
-      const routes = requireRoutes(await generatedModule.default())
+      const routes = requireRoutes(await generatedModule.default()).map(route => ({
+        ...route,
+        html: withRouteMetadata(route, options),
+      }))
       const clientBundle = await clientIslands.buildBundle()
       const styleSheets = Object.values(bundle)
         .filter(

@@ -1,5 +1,7 @@
 .moon/cache/
+.task/
 node_modules/
 dist/
+test-results/
 .npmrc
 .solid-static-islands*

@@ -50,6 +50,12 @@ the rendered page routes. The sitemap follows `trailingSlash` and excludes the
 only when an accurate ISO 8601 modification date applies to every emitted page;
 the build date is not used as a substitute for content modification dates.
 
+When `sitemap.site` is configured, development and production HTML also resolve
+canonical links and Open Graph and Twitter media URLs to absolute URLs.
+Pages with Open Graph metadata receive `og:url` when it is missing. An authored
+`og:url` is preserved and resolved relative to the page URL. The 404 page and
+pages without an authored closing `</head>` are left unchanged.
+
 Set `markdownExport` to generate a Markdown sibling for every emitted HTML
 page at build time. The generated files are output-relative route documents
 (`index.md`, `about/index.md`, and so on), with no extra slashless `.md`
