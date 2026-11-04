@@ -577,7 +577,7 @@ const serveStaticSite = (
       markdownProcessor: options.markdown.processor,
       root: server.config.root,
       styleSheets: () => [...new Set([...environment.moduleGraph.idToModuleMap.values()]
-        .map(module => module.url).filter(url => url.endsWith(".css")))].sort(),
+        .map(module => module.url).filter(url => url.endsWith(".css")))].sort().map(url => url.replace(/^\//, "")),
     })
   }
   let assets = createAssets()

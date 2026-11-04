@@ -363,6 +363,9 @@ describe("client island output", () => {
 
   test("serves fallback HTML and transformed island assets during development", async () => {
     const root = await createFixture()
+    const page = join(root, "src/pages/index.tsx")
+    await writeFile(page, `import "../global.css"\n${await readFile(page, "utf8")}`)
+    await writeFile(join(root, "src/global.css"), ".fixture { display: grid; }")
     const server = await createViteServer({
       appType: "spa",
       logLevel: "silent",
@@ -379,6 +382,14 @@ describe("client island output", () => {
       const $ = loadHtml(await response.text())
       expect($("#fallback").text()).toEqual("Static fallback")
       expect($("#counter").text()).toEqual("Loading client island")
+      const stylesheet = $("link[rel=stylesheet]").map((_index, element) => $(element).attr("href")).get().find(href => href.endsWith("global.css"))
+      if (stylesheet === undefined) throw new Error("Missing server-imported stylesheet")
+      const stylesheetUrl = new URL(stylesheet, origin)
+      expect(stylesheetUrl.origin).toEqual(new URL(origin).origin)
+      const globalCss = await fetch(stylesheetUrl, { headers: { accept: "text/css" }, signal: AbortSignal.timeout(5_000) })
+      expect(globalCss.status).toEqual(200)
+      expect(globalCss.headers.get("content-type")).toContain("text/css")
+      expect(cssRules(await globalCss.text())).toEqual({ ".fixture": { display: "grid" } })
       const island = $("script[type=module][src='/src/counter-island.tsx']")
       expect(island).toHaveLength(1)
       const module = await fetch(new URL("/src/counter-island.tsx", origin), { signal: AbortSignal.timeout(5_000) })

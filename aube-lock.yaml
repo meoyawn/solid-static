@@ -11,6 +11,12 @@ importers:
       '@mdx-js/rollup':
         specifier: ^3.1.1
         version: 3.1.1(rollup@4.62.4)
+      '@types/hast':
+        specifier: ^3.0.5
+        version: 3.0.5
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       github-slugger:
         specifier: ^2.0.0
         version: 2.0.0
@@ -72,15 +78,9 @@ importers:
       '@types/estree':
         specifier: ^1.0.9
         version: 1.0.9
-      '@types/hast':
-        specifier: ^3.0.5
-        version: 3.0.5
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
-      '@types/mdast':
-        specifier: ^4.0.4
-        version: 4.0.4
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
