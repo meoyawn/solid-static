@@ -1,5 +1,5 @@
-import { Buffer } from "node:buffer"
 import type satori from "satori"
+import { renderEnvironment } from "./render-environment.ts"
 
 export interface SatoriImageFont {
   name: string
@@ -14,10 +14,6 @@ export interface SatoriImageOptions {
   width: number
   height: number
 }
-
-export const satoriImagePrefix = "/@solid-static/satori/"
-export const satoriImagePattern =
-  /(?<origin>https?:\/\/[^/\s"'<>]+)?\/@solid-static\/satori\/(?<token>[A-Za-z0-9_-]+)\.png/g
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -58,16 +54,16 @@ function requireOptions(value: unknown): SatoriImageOptions {
 }
 
 /** Render a stateless .satori.tsx template to a PNG in the static-site image pipeline. */
-export function getSatoriImage(options: SatoriImageOptions): {
+export async function getSatoriImage(options: SatoriImageOptions): Promise<{
   src: string
   width: number
   height: number
-} {
+}> {
   if (typeof document !== "undefined")
     throw new TypeError(
       "getSatoriImage() is only available during server rendering",
     )
-  const data = JSON.stringify(
+  JSON.stringify(
     requireOptions(options),
     (_key, value: unknown) => {
       if (typeof value === "function")
@@ -77,12 +73,5 @@ export function getSatoriImage(options: SatoriImageOptions): {
       return value
     },
   )
-  return {
-    src: `${satoriImagePrefix}${Buffer.from(data).toString("base64url")}.png`,
-    width: options.width,
-    height: options.height,
-  }
+  return renderEnvironment().satoriImage(options)
 }
-
-export const parseSatoriImage = (token: string): SatoriImageOptions =>
-  requireOptions(JSON.parse(Buffer.from(token, "base64url").toString()))

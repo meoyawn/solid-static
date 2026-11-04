@@ -6,7 +6,6 @@ import { fromMarkdown } from "mdast-util-from-markdown"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import sharp from "sharp"
 import type { Plugin } from "vite"
-import type { MarkdownProcessor } from "./content.ts"
 
 export interface MarkdownImage {
   end: number
@@ -88,7 +87,6 @@ export const replaceMarkdownImages = (
 const markdownModulePrefix = "\0solid-static-markdown:"
 
 export const markdownImages = (
-  processor: MarkdownProcessor,
   serialize: (value: unknown) => string,
 ): Plugin => ({
   enforce: "pre",
@@ -117,20 +115,12 @@ export const markdownImages = (
       schema: CORE_SCHEMA.withTags(timestampTag),
     })
     const body = match.groups.body
-    const images = await findMarkdownImages(body, sourcePath)
-    const prepared = replaceMarkdownImages(body, images, (_image, index) => `SOLIDSTATICIMAGE${index}END`)
-    const rendered = await processor.process({ path: sourcePath, value: prepared })
-
     return `
-import { createComponent } from "solid-js"
-import { renderToString, ssr } from "solid-js/web"
-import { ResponsiveImage } from ${JSON.stringify(imageComponentPath)}
-${images.map((image, index) => `import MarkdownImage${index} from ${JSON.stringify(`${image.filePath}?no-inline`)}`).join("\n")}
+import { renderEnvironment } from ${JSON.stringify(fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "./render-environment.ts" : "./render-environment.js", import.meta.url)))}
+const content = await renderEnvironment().markdown(${serialize({ path: sourcePath, value: body })})
 export const frontmatter = ${serialize(frontmatter)}
-export const headings = ${serialize(rendered.data?.headings ?? [])}
-let html = ${serialize(String(rendered))}
-${images.map((image, index) => `html = html.replaceAll("SOLIDSTATICIMAGE${index}END", renderToString(() => createComponent(ResponsiveImage, { ...${serialize(image.props)}, src: MarkdownImage${index} })))`).join("\n")}
-export default () => ssr(html)
+export const headings = content.headings
+export default () => content.tree
 `
   },
   async transform(source, id) {

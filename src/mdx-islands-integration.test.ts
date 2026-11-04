@@ -40,11 +40,12 @@ import island from "../island.ts?island"
 `),
         writeFile(join(root, "src/pages/index.tsx"), `
 import { getCollection } from "solid-static/runtime"
+import { MarkdownContent } from "solid-static/render"
 export default () => {
   const entry = getCollection("guides")[0]
   return <html><head></head><body>
     <nav>{entry.rendered.headings.map(heading => <a href={"#" + heading.slug}>{heading.text}</a>)}</nav>
-    <article innerHTML={entry.rendered.html} />
+    <article><MarkdownContent content={entry.rendered} /></article>
   </body></html>
 }
 `),

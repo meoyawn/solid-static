@@ -23,7 +23,6 @@ import {
   createHtmlMarkdownProcessor,
   solidMarkdown,
 } from "solid-static/markdown";
-import { responsiveImages } from "solid-static/responsive-images";
 
 export default defineConfig({
   plugins: [
@@ -34,7 +33,7 @@ export default defineConfig({
         locales: ["en"],
         routing: { prefixDefaultLocale: false },
       },
-      integrations: [solidMarkdown(), responsiveImages()],
+      integrations: [solidMarkdown()],
       markdown: { processor: createHtmlMarkdownProcessor() },
       markdownExport: { exclude: [], force404Markdown: true },
       sitemap: { site: "https://example.com" },
@@ -50,11 +49,14 @@ the rendered page routes. The sitemap follows `trailingSlash` and excludes the
 only when an accurate ISO 8601 modification date applies to every emitted page;
 the build date is not used as a substitute for content modification dates.
 
-When `sitemap.site` is configured, development and production HTML also resolve
-canonical links and Open Graph and Twitter media URLs to absolute URLs.
-Pages with Open Graph metadata receive `og:url` when it is missing. An authored
-`og:url` is preserved and resolved relative to the page URL. The 404 page and
-pages without an authored closing `</head>` are left unchanged.
+Pages and layouts own their metadata. Generate canonical links and social URLs
+directly in JSX, for example `new URL(props.route.path, siteOrigin).href`.
+`sitemap.site` configures the sitemap only; it never repairs or injects page metadata.
+
+Server JSX produces a structured render tree. Images, island URLs, and stylesheet
+links are prepared from that tree and Vite's bundle metadata before HTML is
+serialized. Generated HTML is never parsed, scanned, or rewritten. Browser islands
+still use Solid's normal DOM compiler.
 
 Set `markdownExport` to generate a Markdown sibling for every emitted HTML
 page at build time. The generated files are output-relative route documents
@@ -90,7 +92,7 @@ Add `.tsx`, `.md`, or `.mdx` pages under `src/pages`. The directory structure de
 Repeated headings receive unique suffixes, with numbering scoped to each document.
 Markdown and MDX pages using `solidMarkdown()` also receive heading IDs.
 
-Rendered content collection entries expose `rendered.html` and
+Rendered content collection entries expose `rendered.tree`, `rendered.html`, and
 `rendered.headings`. Each heading contains `depth` (1–6), `slug` (the HTML ID),
 and plain `text`. Build a table of contents from this metadata instead of parsing
 the HTML a second time:
@@ -101,17 +103,21 @@ the HTML a second time:
     {heading => <a href={`#${heading.slug}`}>{heading.text}</a>}
   </For>
 </nav>
-<article innerHTML={entry.rendered.html} />
+<article><MarkdownContent content={entry.rendered} /></article>
 ```
 
-Custom Markdown processors can provide the same metadata through their result's
-`data.headings`. Results without heading metadata produce an empty headings list.
+Custom Markdown processors expose Unified's `parse()` and `run()` APIs and
+produce a HAST tree. They can provide heading metadata through the VFile's
+`data.headings`; missing metadata produces an empty headings list. HTML-only
+processors are not supported: the generator needs source structure, not HTML to
+parse again.
 
 Content collections can include `.mdx` files with a pattern such as `/\.mdx?$/`.
 Use `solidMarkdown()` in `integrations`: Vite compiles MDX imports, components,
 and `?island` entries, then renders collection HTML and heading metadata before
-page generation. Render an MDX collection entry with `innerHTML={entry.rendered.html}`
-just like a Markdown entry; its module scripts become browser island assets.
+page generation. Import `MarkdownContent` from `solid-static/render` and use it
+for both Markdown and MDX entries so their nodes remain available to asset
+preparation and Markdown export without reparsing HTML.
 
 `loadCollections()` exposes each entry's absolute `filePath` and loads its
 frontmatter and body. Standalone loading does not compile MDX; MDX entries gain
@@ -240,11 +246,13 @@ export default function Home() {
 }
 ```
 
-The responsive images integration generates the requested variants and adds the resulting `srcset` during development and production builds.
+`ResponsiveImage` prepares its variants and generates the final `src` and `srcset`
+attributes directly during development and production rendering. No additional
+responsive-image plugin is needed.
 
 ### `getImage()`
 
-Use `getImage()` during server rendering to generate one transformed image. It follows Astro's [`getImage()` pattern](https://docs.astro.build/en/guides/images/#generating-images-with-getimage) for images used outside a standard image component. Import it from `solid-static/image`, then await it at module scope or inside an async server-rendered component:
+Use `getImage()` during server rendering to generate one transformed image. It follows Astro's [`getImage()` pattern](https://docs.astro.build/en/guides/images/#generating-images-with-getimage) for images used outside a standard image component. Import it from `solid-static/image`, then await it at module scope, in `getStaticPaths()`, or through `Await` for per-page data:
 
 ```tsx
 import source from "../assets/social-preview.png";
@@ -307,38 +315,42 @@ export default function SocialCard(props: { title: string }): JSX.Element {
 }
 ```
 
-Call `getSatoriImage()` from a page or layout during server rendering. Unlike
-`getImage()`, it is synchronous, so props can supply the card content directly:
+Await `getSatoriImage()` during server rendering. Its promise resolves to a real
+asset URL before that URL is used in metadata or JSON. For per-page props, use
+`Await` to generate the document after its image is ready:
 
 ```tsx
-import { createMemo } from "solid-js";
+import { Await } from "solid-static/render";
 import { getSatoriImage } from "solid-static/satori";
 import font from "./assets/inter-bold.woff?url&no-inline";
 import SocialCard from "./social-card.satori.tsx";
 
 export default function Page(props: { title: string }) {
-  const image = createMemo(() => getSatoriImage({
-    element: SocialCard({ title: props.title }),
-    fonts: [{ name: "Inter", src: font, weight: 700 }],
-    width: 1200,
-    height: 630,
-  }));
   return (
-    <html>
-      <head>
-        <meta property="og:image" content={image().src} />
-        <meta name="twitter:image" content={image().src} />
-      </head>
-      <body>{props.title}</body>
-    </html>
+    <Await value={getSatoriImage({
+      element: SocialCard({ title: props.title }),
+      fonts: [{ name: "Inter", src: font, weight: 700 }],
+      width: 1200,
+      height: 630,
+    })}>
+      {image => (
+        <html>
+          <head>
+            <meta property="og:image" content={image.src} />
+            <meta name="twitter:image" content={image.src} />
+          </head>
+          <body>{props.title}</body>
+        </html>
+      )}
+    </Await>
   );
 }
 ```
 
-The result contains `src`, `width`, and `height`. The build renders the template
+The result contains `src`, `width`, and `height`. The renderer prepares the template
 with local TTF, OTF, or WOFF fonts, rasterizes it with Sharp, emits a PNG under
-the configured assets directory, and replaces image references in the final
-HTML. Identical cards share one file; the filename hashes the rendered bytes,
+the configured assets directory before generating HTML. Identical cards share
+one file; the filename hashes the rendered bytes,
 so content, layout, logo, or font changes produce a new URL. The same renderer
 serves previews in development. Missing fonts and rendering failures fail the
 build instead of silently substituting another card. Templates must return
@@ -346,7 +358,6 @@ serializable intrinsic elements; render nested custom components before passing
 the element to `getSatoriImage()`. Embed imported images as data URLs to keep
 rendering independent of external image hosts. Font imports here are renderer
 inputs and do not install browser fonts or add a font stylesheet to pages.
-Font files used only by the renderer are removed from the final bundle.
 
 ## Building from a CLI
 
@@ -358,26 +369,22 @@ aube exec vite build
 aube exec vite build --outDir public-site
 ```
 
-For a data-driven site, let the template project own its data contract,
-dependencies, build command, and deployment artifact. A self-contained Bun
-executable can embed an archive of that project and its installed dependencies
-(including Vite's native dependencies). At runtime, extract into an isolated
-working directory, supply the content data, and invoke `vite build` using the
-embedded Bun runtime (`BUN_BE_BUN=1` and the executable's own path). Upload the
-result and remove the working directory. This avoids requiring Node.js, Bun,
-source checkouts, or package installation on the deployment machine while
-preserving Vite's normal plugin and package resolution.
+For a data-driven executable, precompile its server JSX using Vite and
+`renderJsx()` from `solid-static/vite`, then call `renderStaticSite()` from
+`solid-static/render` with the supplied page data. Build browser entries with
+Vite separately and supply their already-resolved URLs to the page components.
+The executable can embed the precompiled renderer and browser artifacts; content
+changes do not need a fresh Vite build. Bun is only needed when packaging the
+self-contained executable, not as the general project runtime.
 
-See Bun's [single-file executable documentation](https://bun.com/docs/bundler/executables)
-and [archive API](https://bun.com/docs/runtime/archive). Package the complete
-runtime dependency graph and the correct native packages for the target OS and
-architecture. Test the artifact away from the source tree, with no network or
-installed JavaScript runtime. Rebuild the artifact when templates or dependency
-versions change; content changes only need new input data.
+Use Vite's manifest and `viteMetadata.importedCss` for asset dependencies rather
+than discovering links in serialized HTML. Vite owns module resolution, browser
+bundles, source maps, and asset filenames. The generator owns its render tree and
+HTML/Markdown serialization.
 
 ## Development and CI
 
-Install Node.js 24, Aube 2.5.1, and Moon 2.5.5, then run:
+Install Node.js 24, Aube 2.5.1, Vite 8.3.5, and Moon 2.5.5, then run:
 
 ```sh
 aube install --frozen-lockfile

@@ -59,10 +59,11 @@ export default props => <html><body>{props.children}</body></html>
 `),
           writeFile(join(root, "src/pages/writing/[...slug].tsx"), `
 import { getCollection } from "solid-static/runtime"
+import { MarkdownContent } from "solid-static/render"
 export const getStaticPaths = () => getCollection("writing").map(entry => ({
   params: { slug: entry.id }, props: { entry },
 }))
-export default props => <html><body><article innerHTML={props.entry.rendered.html} /></body></html>
+export default props => <html><body><article><MarkdownContent content={props.entry.rendered} /></article></body></html>
 `),
         ])
 

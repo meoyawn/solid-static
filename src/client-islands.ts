@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { isAbsolute, relative } from "node:path"
+import { fileURLToPath } from "node:url"
 import {
   build,
   normalizePath,
@@ -12,7 +13,6 @@ import solid from "vite-plugin-solid"
 
 interface RegisteredIsland {
   entryPath: string
-  placeholder: string
 }
 
 interface ClientChunkOutput {
@@ -49,7 +49,6 @@ export interface ClientIslands {
 
 const islandQuery = "?island"
 const resolvedIslandPrefix = "\0solid-static-island:"
-const placeholderPrefix = "__SOLID_STATIC_ISLAND_"
 const manifestFileName = ".vite/solid-static-islands-manifest.json"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -217,14 +216,13 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
 
       const entryPath = resolved.id.replace(/\?.*$/, "")
       const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 12)
-      const placeholder = `${placeholderPrefix}${key}__`
       const existing = entries.get(key)
 
       if (existing !== undefined && existing.entryPath !== entryPath) {
         throw new TypeError(`Client island key collision for ${entryPath}`)
       }
 
-      entries.set(key, { entryPath, placeholder })
+      entries.set(key, { entryPath })
       return `${resolvedIslandPrefix}${key}`
     },
     load(id) {
@@ -239,12 +237,11 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
         throw new TypeError(`Unknown client island ${key}`)
       }
 
-      const url =
-        config.command === "serve"
-          ? developmentModuleUrl(island.entryPath, config.root)
-          : island.placeholder
-
-      return `export default ${JSON.stringify(url)}`
+      if (config.command === "serve") {
+        return `export default ${JSON.stringify(developmentModuleUrl(island.entryPath, config.root))}`
+      }
+      const environmentPath = fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "./render-environment.ts" : "./render-environment.js", import.meta.url))
+      return `import { renderEnvironment } from ${JSON.stringify(environmentPath)}\nexport default renderEnvironment().islandUrl(${JSON.stringify(key)})`
     },
   }
 
@@ -312,9 +309,9 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
         throw new TypeError(`Vite emitted unknown client island ${output.name}`)
       }
 
-      entryFiles.set(island.placeholder, output.fileName)
+      entryFiles.set(output.name, output.fileName)
       styleFilesByEntry.set(
-        island.placeholder,
+        output.name,
         manifestStyleFiles(manifest, output.fileName),
       )
     }

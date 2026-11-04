@@ -5,3 +5,4 @@ dist/
 test-results/
 .npmrc
 .solid-static-islands*
+.solid-static-render-*

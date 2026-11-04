@@ -14,7 +14,7 @@ describe("content collections", () => {
         { guides: { directory, pattern: /\.md$/u } },
         createHtmlMarkdownProcessor(),
       )
-      expect(collections.guides?.[0]?.rendered).toEqual({
+      expect(collections.guides?.[0]?.rendered).toMatchObject({
         html: '<h2 id="listen">Listen</h2>\n<h3 id="share">Share</h3>',
         headings: [
           { depth: 2, slug: "listen", text: "Listen" },

@@ -1,4 +1,4 @@
-import { Buffer } from "node:buffer"
+import { renderEnvironment } from "./render-environment.ts"
 
 export type ImageOutputFormat = "avif" | "jpeg" | "jpg" | "png" | "webp"
 export type ImageQualityPreset = "high" | "low" | "max" | "mid"
@@ -50,13 +50,6 @@ export interface GeneratedImageRequest {
   sourceUrl: string
   width?: number
 }
-
-export const generatedImagePathPrefix = "/@solid-static/get-image/"
-export const generatedImagePattern =
-  /\/@solid-static\/get-image\/(?<token>[A-Za-z0-9_-]+)/g
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 const requireDimension = (
   value: unknown,
@@ -130,51 +123,6 @@ const inferDimensions = (
   }
 }
 
-const encodeRequest = (request: GeneratedImageRequest): string =>
-  Buffer.from(JSON.stringify(request)).toString("base64url")
-
-export const parseGeneratedImageRequest = (
-  token: string,
-): GeneratedImageRequest => {
-  let value: unknown
-
-  try {
-    value = JSON.parse(Buffer.from(token, "base64url").toString())
-  } catch {
-    throw new TypeError("Invalid getImage() request")
-  }
-
-  if (
-    !isRecord(value) ||
-    typeof value.sourceUrl !== "string" ||
-    value.sourceUrl === "" ||
-    !isImageFormat(value.format) ||
-    (value.fit !== undefined &&
-      value.fit !== "contain" &&
-      value.fit !== "cover" &&
-      value.fit !== "fill" &&
-      value.fit !== "inside" &&
-      value.fit !== "outside") ||
-    (value.position !== undefined && typeof value.position !== "string") ||
-    (value.quality !== undefined && !isImageQuality(value.quality))
-  ) {
-    throw new TypeError("Invalid getImage() request")
-  }
-
-  const width = requireDimension(value.width, "width")
-  const height = requireDimension(value.height, "height")
-
-  return {
-    format: value.format,
-    sourceUrl: value.sourceUrl,
-    ...(value.fit === undefined ? {} : { fit: value.fit }),
-    ...(height === undefined ? {} : { height }),
-    ...(value.position === undefined ? {} : { position: value.position }),
-    ...(value.quality === undefined ? {} : { quality: value.quality }),
-    ...(width === undefined ? {} : { width }),
-  }
-}
-
 export const getImage = async (
   rawOptions: GetImageOptions,
 ): Promise<GetImageResult> => {
@@ -231,11 +179,13 @@ export const getImage = async (
     attributes.height = dimensions.height
   }
 
+  const image = await renderEnvironment().image(request)
+
   return {
-    attributes,
+    attributes: { ...attributes, height: image.height, width: image.width },
     options,
     rawOptions,
-    src: `${generatedImagePathPrefix}${encodeRequest(request)}`,
+    src: image.src,
     srcSet: { attribute: "", values: [] },
   }
 }

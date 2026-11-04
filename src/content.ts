@@ -1,7 +1,10 @@
 import { readdir, readFile } from "node:fs/promises"
 import { extname, join, relative, resolve } from "node:path"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
-import type { Data } from "vfile"
+import type { Root as HastRoot } from "hast"
+import type { Root as MdastRoot } from "mdast"
+import { VFile } from "vfile"
+import { htmlForTree } from "./render-tree.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -20,13 +23,21 @@ declare module "vfile" {
 export interface RenderedMarkdown {
   html: string
   headings: MarkdownHeading[]
+  tree: HastRoot
 }
 
 export interface MarkdownProcessor {
-  process(file: { path: string; value: string }): Promise<{
-    data?: Data | undefined
-    toString(): string
-  }>
+  parse(file: VFile): MdastRoot
+  run(tree: MdastRoot, file: VFile): Promise<HastRoot>
+}
+
+export async function compileMarkdown(
+  processor: MarkdownProcessor,
+  input: { path: string; value: string },
+): Promise<{ tree: HastRoot; headings: MarkdownHeading[] }> {
+  const file = new VFile(input)
+  const tree = await processor.run(processor.parse(file), file)
+  return { tree, headings: file.data.headings ?? [] }
 }
 
 export interface CollectionDefinition<TData = unknown> {
@@ -139,7 +150,7 @@ const loadCollection = async (
       const data = definition.schema?.(parsed.data, relativePath) ?? parsed.data
       const rendered =
         extname(filePath) === ".md" && markdownProcessor !== undefined
-          ? await markdownProcessor.process({ path: filePath, value: parsed.body })
+          ? await compileMarkdown(markdownProcessor, { path: filePath, value: parsed.body })
           : undefined
 
       return {
@@ -150,8 +161,9 @@ const loadCollection = async (
                 ? {}
                 : {
                     rendered: {
-                      html: String(rendered),
-                      headings: rendered.data?.headings ?? [],
+                      html: htmlForTree(rendered.tree),
+                      headings: rendered.headings,
+                      tree: rendered.tree,
                     },
                   }),
             }

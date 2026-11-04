@@ -1,4 +1,6 @@
-import type { JSX } from "solid-js"
+import { splitProps, type JSX } from "solid-js"
+import { deferred, jsx } from "./jsx-runtime.ts"
+import { renderEnvironment } from "./render-environment.ts"
 import {
   getSizesAttribute,
   type ImageLayout,
@@ -29,33 +31,17 @@ export interface ResponsiveImageProps
 }
 
 export function ResponsiveImage(props: ResponsiveImageProps): JSX.Element {
-  const {
-    decoding,
-    fetchpriority,
-    format = "webp",
-    layout = "none",
-    loading,
-    priority = false,
-    sizes,
-    widths,
-    ...attributes
-  } = props
-  const resolvedSizes =
-    sizes ?? getSizesAttribute({ layout, width: attributes.width })
+  const [local, attributes] = splitProps(props, [
+    "decoding", "fetchpriority", "format", "layout", "loading", "priority", "sizes", "widths",
+  ])
 
-  return (
-    <img
-      {...attributes}
-      data-astro-image={layout === "none" ? undefined : layout}
-      data-solid-static-format={format}
-      data-solid-static-image=""
-      data-solid-static-layout={layout}
-      data-solid-static-sizes={resolvedSizes}
-      data-solid-static-widths={widths?.join(",")}
-      decoding={decoding ?? (priority ? "sync" : "async")}
-      fetchpriority={fetchpriority ?? (priority ? "high" : undefined)}
-      loading={loading ?? (priority ? "eager" : "lazy")}
-      sizes={resolvedSizes}
-    />
-  )
+  return deferred(async () => jsx("img", {
+    ...attributes,
+    ...await renderEnvironment().responsiveImage(props),
+    "data-astro-image": local.layout === undefined || local.layout === "none" ? undefined : local.layout,
+    decoding: local.decoding ?? (local.priority ? "sync" : "async"),
+    fetchpriority: local.fetchpriority ?? (local.priority ? "high" : undefined),
+    loading: local.loading ?? (local.priority ? "eager" : "lazy"),
+    sizes: local.sizes ?? getSizesAttribute({ layout: local.layout ?? "none", width: props.width }),
+  }))
 }

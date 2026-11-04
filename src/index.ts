@@ -1,11 +1,9 @@
-import { Buffer } from "node:buffer"
-import { createHash } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import { basename, dirname, extname, join, relative, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { dirname, extname, join, relative, resolve } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import {
-  normalizePath,
+  isRunnableDevEnvironment,
   type Plugin,
   type PluginOption,
   type UserConfig,
@@ -19,23 +17,17 @@ import {
 } from "./content.ts"
 import {
   createClientIslands,
-  type ClientIslandBundle,
   type ClientIslands,
 } from "./client-islands.ts"
 import {
   createMarkdownSiblings,
   type StaticSiteMarkdownExportOptions,
 } from "./markdown-export.ts"
-import { responsiveImages } from "./responsive-images.ts"
-import { withPageMetadata } from "./page-metadata.ts"
-import { satoriImages } from "./satori-images.ts"
-import {
-  findMarkdownImages,
-  imageComponentPath,
-  markdownImages,
-  replaceMarkdownImages,
-  type MarkdownImage,
-} from "./markdown-images.ts"
+import { markdownImages } from "./markdown-images.ts"
+import type { Root } from "hast"
+import type { RenderEnvironment } from "./render-environment.ts"
+import { createRenderAssets } from "./render-assets.ts"
+import { renderJsx } from "./render-jsx.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
 
@@ -94,16 +86,11 @@ type DiscoveredPage = DiscoveredComponentPage | DiscoveredDocumentPage
 interface StaticSiteRoute {
   fileName: string
   html: string
+  tree: Root
 }
 
 interface GeneratedStaticSiteModule {
-  default: () => Promise<unknown>
-}
-
-interface StaticSiteEntry {
-  code: string
-  dynamicImports: string[]
-  imports: string[]
+  default: (environment: RenderEnvironment) => Promise<unknown>
 }
 
 const entryId = "virtual:solid-static-entry"
@@ -125,7 +112,8 @@ const isGeneratedStaticSiteModule = (
 const isStaticSiteRoute = (value: unknown): value is StaticSiteRoute =>
   isRecord(value) &&
   typeof value.fileName === "string" &&
-  typeof value.html === "string"
+  typeof value.html === "string" &&
+  isRecord(value.tree) && value.tree.type === "root" && Array.isArray(value.tree.children)
 
 const requireRoutes = (value: unknown): StaticSiteRoute[] => {
   if (!Array.isArray(value) || !value.every(isStaticSiteRoute)) {
@@ -135,94 +123,21 @@ const requireRoutes = (value: unknown): StaticSiteRoute[] => {
   return value
 }
 
-const executableEntryCode = (entry: StaticSiteEntry): string => {
-  let code = entry.code
-
-  for (const specifier of [...entry.imports, ...entry.dynamicImports]) {
-    if (specifier.startsWith(".") || specifier.startsWith("/")) {
-      throw new TypeError(
-        `Static-site SSR entry contains unsupported relative import ${specifier}`,
-      )
-    }
-
-    const resolved = import.meta.resolve(specifier)
-    code = code
-      .replaceAll(`"${specifier}"`, `"${resolved}"`)
-      .replaceAll(`'${specifier}'`, `'${resolved}'`)
+async function renderGeneratedModule(
+  code: string,
+  root: string,
+  environment: RenderEnvironment,
+): Promise<StaticSiteRoute[]> {
+  const directory = await mkdtemp(join(root, ".solid-static-render-"))
+  try {
+    const modulePath = join(directory, "entry.mjs")
+    await writeFile(modulePath, code)
+    const module: unknown = await import(pathToFileURL(modulePath).href)
+    if (!isGeneratedStaticSiteModule(module)) throw new TypeError("Vite emitted an invalid static-site module")
+    return requireRoutes(await module.default(environment))
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
-
-  return code
-}
-
-const withStyleSheets = (
-  html: string,
-  styleSheets: readonly string[],
-): string => {
-  if (styleSheets.length === 0) {
-    return html
-  }
-
-  const links = styleSheets
-    .filter(href => !html.includes(`href="${href}"`))
-    .map(href => `<link rel="stylesheet" href="${href}">`)
-    .join("")
-
-  if (!html.includes("</head>")) {
-    throw new TypeError("Static-site route has no closing head element")
-  }
-
-  return html.replace("</head>", `${links}</head>`)
-}
-
-const withClientIslands = (
-  html: string,
-  bundle: ClientIslandBundle,
-  routeFileName: string,
-): string => {
-  const entries = [...bundle.entryFiles].filter(([placeholder]) =>
-    html.includes(placeholder),
-  )
-
-  if (entries.length === 0) {
-    return html
-  }
-
-  let transformed = html
-
-  for (const [placeholder, fileName] of entries) {
-    transformed = transformed.replaceAll(
-      placeholder,
-      publicAssetUrl(bundle.base, fileName, routeFileName),
-    )
-  }
-
-  const styleUrls = [
-    ...new Set(
-      entries.flatMap(([placeholder]) =>
-        (bundle.styleFilesByEntry.get(placeholder) ?? []).map(fileName =>
-          publicAssetUrl(bundle.base, fileName, routeFileName),
-        ),
-      ),
-    ),
-  ]
-
-  return withStyleSheets(transformed, styleUrls)
-}
-
-const publicAssetUrl = (
-  base: string,
-  fileName: string,
-  routeFileName: string,
-): string => {
-  if (base === "" || base.startsWith(".")) {
-    const relativeFileName = relative(dirname(routeFileName), fileName)
-    return relativeFileName.startsWith(".")
-      ? normalizePath(relativeFileName)
-      : `./${normalizePath(relativeFileName)}`
-  }
-
-  const normalizedBase = base.endsWith("/") ? base : `${base}/`
-  return `${normalizedBase}${fileName}`
 }
 
 const resolveOptions = (
@@ -302,20 +217,6 @@ const publicPathForFileName = (
   }
 
   return undefined
-}
-
-function withRouteMetadata(
-  route: StaticSiteRoute,
-  options: ResolvedStaticSiteOptions,
-): string {
-  const path = publicPathForFileName(route.fileName, options.trailingSlash)
-
-  if (options.sitemap === undefined || path === undefined) {
-    return route.html
-  }
-
-  const site = options.sitemap.site.replace(/\/+$/, "")
-  return withPageMetadata(route.html, new URL(`${site}${path}`).href)
 }
 
 export const createSitemap = (
@@ -531,25 +432,7 @@ const serialize = (value: unknown): string => {
 const virtualEntry = async (
   options: ResolvedStaticSiteOptions,
 ): Promise<string> => {
-  const images: (MarkdownImage & { token: string })[] = []
-  const collections = await loadCollections(
-    options.collections,
-    {
-      async process(file) {
-        const localImages = await findMarkdownImages(file.value, file.path)
-        const prepared = localImages.map(image => ({
-          ...image,
-          token: `SOLIDSTATICIMAGE${createHash("sha256").update(`${file.path}:${image.start}`).digest("hex")}`,
-        }))
-        images.push(...prepared)
-        return options.markdown.processor.process({
-          path: file.path,
-          value: replaceMarkdownImages(file.value, localImages, (_image, index) => prepared[index]?.token ?? ""),
-        })
-      },
-    },
-  )
-  images.sort((left, right) => left.token.localeCompare(right.token))
+  const collections = await loadCollections(options.collections)
   const pages = await discoverPages(options)
   const documentPages = pages.filter(isDocumentPage)
   const componentPages = pages.filter(isComponentPage)
@@ -574,19 +457,19 @@ const virtualEntry = async (
   const pageImports = documentPages
     .map(
       (page, index) =>
-        `import Page${index}, { frontmatter as frontmatter${index} } from ${JSON.stringify(page.pagePath)}\nimport Layout${index} from ${JSON.stringify(page.layoutPath)}`,
+        `const [Page${index}, Layout${index}] = await Promise.all([import(${JSON.stringify(page.pagePath)}), import(${JSON.stringify(page.layoutPath)})])`,
     )
     .join("\n")
   const componentImports = componentPages
     .map(
       (page, index) =>
-        `import * as ComponentPage${index} from ${JSON.stringify(page.pagePath)}`,
+        `const ComponentPage${index} = await import(${JSON.stringify(page.pagePath)})`,
     )
     .join("\n")
   const pageRecords = documentPages
     .map(
       (page, index) =>
-        `{ Content: Page${index}, Layout: Layout${index}, fileName: ${JSON.stringify(page.fileName)}, frontmatter: frontmatter${index}, routePath: ${JSON.stringify(page.routePath)} }`,
+        `{ Content: Page${index}.default, Layout: Layout${index}.default, fileName: ${JSON.stringify(page.fileName)}, frontmatter: Page${index}.frontmatter, routePath: ${JSON.stringify(page.routePath)} }`,
     )
     .join(",\n")
   const staticComponentRecords = staticComponentPages
@@ -614,7 +497,7 @@ const virtualEntry = async (
   )
   const collectionImports = mdxEntries
     .map(({ entry }, index) =>
-      `import * as CollectionDocument${index} from ${JSON.stringify(entry.filePath)}`,
+      `const CollectionDocument${index} = await import(${JSON.stringify(entry.filePath)})`,
     )
     .join("\n")
   const collectionDocuments = mdxEntries
@@ -626,28 +509,23 @@ const virtualEntry = async (
   return `
 import { renderStaticSite, renderMdxCollections } from ${JSON.stringify(rendererPath)}
 import { setCollections } from "solid-static/runtime"
-import { createComponent } from "solid-js"
-import { renderToString } from "solid-js/web"
-import { ResponsiveImage } from ${JSON.stringify(imageComponentPath)}
-${images.map((image, index) => `import MarkdownImage${index} from ${JSON.stringify(`${image.filePath}?no-inline`)}`).join("\n")}
-${pageImports}
-${componentImports}
-${collectionImports}
+import { withRenderEnvironment } from ${JSON.stringify(fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "./render-environment.ts" : "./render-environment.js", import.meta.url)))}
 
-export default async function generateStaticSite() {
+export default function generateStaticSite(environment) {
+ return withRenderEnvironment(environment, async () => {
   const collections = ${serialize(collectionValues)}
-  const images = [${images.map((image, index) => `[${JSON.stringify(image.token)}, renderToString(() => createComponent(ResponsiveImage, { ...${serialize(image.props)}, src: MarkdownImage${index} }))]`).join(",\n")}]
   for (const entries of Object.values(collections)) {
     for (const entry of entries) {
-      if (entry.rendered !== undefined) {
-        for (const [token, image] of images) {
-          entry.rendered.html = entry.rendered.html.replaceAll(token, image)
-        }
+      if (entry.body !== undefined && entry.filePath.endsWith(".md")) {
+        entry.rendered = await environment.markdown({ path: entry.filePath, value: entry.body })
       }
     }
   }
   setCollections(collections)
-  renderMdxCollections(collections, [${collectionDocuments}])
+  ${collectionImports}
+  await renderMdxCollections(collections, [${collectionDocuments}])
+  ${pageImports}
+  ${componentImports}
 
   return renderStaticSite({
     collections,
@@ -656,6 +534,7 @@ export default async function generateStaticSite() {
     staticPages: [${staticComponentRecords}],
     trailingSlash: ${JSON.stringify(options.trailingSlash)},
   })
+ })
 }
 `
 }
@@ -679,47 +558,29 @@ const requestFileName = (
     : `${requestedPath}.html`
 }
 
-const rewriteDevAssetUrls = (
-  html: string,
-  assets: Map<string, string>,
-): string =>
-  html.replace(
-    /(?<prefix>\b(?:href|src)=")(?<href>\/[^"\s]+\?[^"\s]*no-inline[^"\s]*)(?<suffix>")/g,
-    (match, ...args: unknown[]) => {
-      const groups = args.at(-1)
-
-      if (!isRecord(groups)) {
-        return match
-      }
-
-      const prefix = groups.prefix
-      const href = groups.href
-      const suffix = groups.suffix
-
-      if (
-        typeof prefix !== "string" ||
-        typeof href !== "string" ||
-        typeof suffix !== "string"
-      ) {
-        return match
-      }
-
-      const pathname = new URL(href, "http://solid-static.local").pathname
-      const extension = extname(pathname)
-      const name = basename(pathname, extension)
-      const hash = createHash("sha256").update(href).digest("hex").slice(0, 8)
-      const publicPath = `/assets/${name}-${hash}${extension}`
-      assets.set(publicPath, href)
-      return `${prefix}${publicPath}${suffix}`
-    },
-  )
-
 const serveStaticSite = (
   server: ViteDevServer,
   options: ResolvedStaticSiteOptions,
 ): (() => void) => {
   let routesPromise: Promise<StaticSiteRoute[]> | undefined
-  const assets = new Map<string, string>()
+  const environment = server.environments.ssr
+  if (!environment || !isRunnableDevEnvironment(environment)) {
+    throw new TypeError("Static-site development requires Vite's runnable SSR environment")
+  }
+  const runner = environment.runner
+
+  function createAssets() {
+    return createRenderAssets({
+      assetsDirectory: server.config.build.assetsDir,
+      base: server.config.base,
+      devClient: server.config.server.hmr !== false,
+      markdownProcessor: options.markdown.processor,
+      root: server.config.root,
+      styleSheets: () => [...new Set([...environment.moduleGraph.idToModuleMap.values()]
+        .map(module => module.url).filter(url => url.endsWith(".css")))].sort(),
+    })
+  }
+  let assets = createAssets()
   const discoveryRoots = [
     options.pagesDirectory,
     ...Object.values(options.collections).map(collection =>
@@ -728,15 +589,12 @@ const serveStaticSite = (
   ]
 
   async function routes(): Promise<StaticSiteRoute[]> {
-    routesPromise ??= server.ssrLoadModule(entryId).then(async module => {
+    routesPromise ??= runner.import(entryId).then(async module => {
       if (!isGeneratedStaticSiteModule(module)) {
         throw new TypeError("Vite loaded an invalid static-site module")
       }
 
-      return requireRoutes(await module.default()).map(route => ({
-        ...route,
-        html: withRouteMetadata(route, options),
-      }))
+      return requireRoutes(await module.default(assets))
     })
 
     return routesPromise
@@ -744,14 +602,15 @@ const serveStaticSite = (
 
   const invalidateRoutes = (): void => {
     routesPromise = undefined
-    assets.clear()
-    const entryModule = server.moduleGraph.getModuleById(resolvedEntryId)
+    assets = createAssets()
+    const entryModule = environment.moduleGraph.getModuleById(resolvedEntryId)
 
     if (entryModule !== undefined) {
-      server.moduleGraph.invalidateModule(entryModule)
+      environment.moduleGraph.invalidateModule(entryModule)
     }
 
-    server.ws.send({ type: "full-reload" })
+    runner.clearCache()
+    server.environments.client?.hot.send({ type: "full-reload" })
   }
   const rediscover = (filePath: string): void => {
     const absolutePath = resolve(filePath)
@@ -765,17 +624,9 @@ const serveStaticSite = (
     }
   }
 
-  const styleSheets = (): string[] =>
-    [
-      ...new Set(
-        [...server.moduleGraph.idToModuleMap.values()]
-          .map(module => module.url)
-          .filter(url => new URL(url, "http://solid-static.local").pathname.endsWith(".css")),
-      ),
-    ].sort()
-
   server.watcher.on("add", rediscover)
   server.watcher.on("unlink", rediscover)
+  server.watcher.on("change", rediscover)
 
   server.middlewares.use(function staticSiteMiddleware(
     request,
@@ -789,12 +640,21 @@ const serveStaticSite = (
       }
 
       const requestUrl = new URL(request.url, "http://solid-static.local")
-      const assetTarget = assets.get(requestUrl.pathname)
+      const assetTarget = assets.redirects.get(requestUrl.pathname)
 
       if (assetTarget !== undefined) {
         response.statusCode = 302
         response.setHeader("Location", assetTarget)
         response.end()
+        return
+      }
+
+      const content = assets.files.get(requestUrl.pathname)
+      if (content !== undefined) {
+        const extension = extname(requestUrl.pathname).slice(1)
+        response.statusCode = 200
+        response.setHeader("Content-Type", extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`)
+        response.end(request.method === "HEAD" ? undefined : content)
         return
       }
 
@@ -842,22 +702,12 @@ const serveStaticSite = (
         statusCode = 404
       }
 
-      const transformed = await server.transformIndexHtml(
-        requestUrl.pathname,
-        withStyleSheets(route.html, styleSheets()),
-      )
-      const html = rewriteDevAssetUrls(transformed, assets)
-
       response.statusCode = statusCode
       response.setHeader("Content-Type", "text/html; charset=utf-8")
-      response.end(request.method === "HEAD" ? undefined : html)
+      response.end(request.method === "HEAD" ? undefined : route.html)
     }
 
     void handleRequest().catch(error => {
-      if (error instanceof Error) {
-        server.ssrFixStacktrace(error)
-      }
-
       next(error)
     })
   })
@@ -873,12 +723,14 @@ const staticSitePlugin = (
   let invalidateRoutes = (): void => undefined
   let configuredBase: string | undefined
   let publicBase = "/"
+  let assetsDirectory = "assets"
 
   return {
     name: "solid-static",
     configResolved(config) {
       options = resolveOptions(unresolved, config.root)
       publicBase = configuredBase ?? config.base
+      assetsDirectory = config.build.assetsDir
       validateOptions(options)
     },
     config(userConfig, environment) {
@@ -914,8 +766,8 @@ const staticSitePlugin = (
     configureServer(server) {
       invalidateRoutes = serveStaticSite(server, options)
     },
-    handleHotUpdate() {
-      invalidateRoutes()
+    hotUpdate() {
+      if (this.environment.name === "ssr") invalidateRoutes()
     },
     async generateBundle(_outputOptions, bundle) {
       const entry = Object.values(bundle).find(
@@ -926,25 +778,18 @@ const staticSitePlugin = (
         throw new Error("Vite did not emit the static site's SSR entry")
       }
 
-      const moduleUrl = `data:text/javascript;base64,${Buffer.from(executableEntryCode(entry)).toString("base64")}`
-      const generatedModule: unknown = await import(moduleUrl)
-
-      if (!isGeneratedStaticSiteModule(generatedModule)) {
-        throw new TypeError("Vite emitted an invalid static-site module")
-      }
-
-      const routes = requireRoutes(await generatedModule.default()).map(route => ({
-        ...route,
-        html: withRouteMetadata(route, options),
-      }))
       const clientBundle = await clientIslands.buildBundle()
-      const styleSheets = Object.values(bundle)
-        .filter(
-          output =>
-            output.type === "asset" && output.fileName.endsWith(".css"),
-        )
-        .map(output => output.fileName)
-        .sort()
+      const assets = createRenderAssets({
+        assetsDirectory,
+        base: publicBase,
+        bundle,
+        client: clientBundle,
+        markdownProcessor: options.markdown.processor,
+        root: dirname(dirname(options.pagesDirectory)),
+        styleSheets: () => [...(entry.viteMetadata?.importedCss ?? [])].sort(),
+        emit: (name, source) => this.getFileName(this.emitFile({ type: "asset", name, source })),
+      })
+      const routes = await renderGeneratedModule(entry.code, dirname(dirname(options.pagesDirectory)), assets)
 
       for (const [fileName, output] of Object.entries(bundle)) {
         if (output.type === "chunk") {
@@ -970,24 +815,13 @@ const staticSitePlugin = (
           : undefined
 
       for (const route of routes) {
-        const renderedHtml = withClientIslands(
-          withStyleSheets(
-            route.html,
-            styleSheets.map(fileName =>
-              publicAssetUrl(publicBase, fileName, route.fileName),
-            ),
-          ),
-          clientBundle,
-          route.fileName,
-        )
-
         this.emitFile({
           type: "asset",
           fileName: route.fileName,
           source:
             route.fileName === "404.html" && markdown404Source !== undefined
               ? markdown404Source
-              : renderedHtml,
+              : route.html,
         })
       }
 
@@ -1014,12 +848,11 @@ export const staticSite = (options: StaticSiteOptions): PluginOption => {
   const clientIslands = createClientIslands(options.client)
 
   return [
-    markdownImages(options.markdown.processor, serialize),
+    renderJsx(),
+    markdownImages(serialize),
     ...options.integrations,
     clientIslands.plugin,
-    solid({ ssr: true, exclude: /\.satori\.tsx$/ }),
+    solid({ ssr: true, hot: false, exclude: /\.satori\.tsx$/ }),
     staticSitePlugin(options, clientIslands),
-    responsiveImages(),
-    satoriImages(),
   ]
 }

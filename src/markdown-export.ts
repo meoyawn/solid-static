@@ -1,162 +1,87 @@
-/// <reference path="./turndown.d.ts" />
-
-import TurndownService from "turndown"
-import { gfm } from "turndown-plugin-gfm"
+import type { Element, Root, RootContent } from "hast"
+import { toHtml } from "hast-util-to-html"
+import { toMdast } from "hast-util-to-mdast"
+import { gfmToMarkdown } from "mdast-util-gfm"
+import { toMarkdown } from "mdast-util-to-markdown"
 
 export interface StaticSiteMarkdownExportOptions {
   /** Glob-like output file patterns to skip. */
   exclude?: string[]
-  /** Serve the generated 404 Markdown as the static 404 asset. */
+  /** Emit the generated 404 Markdown as the static 404 asset. */
   force404Markdown?: boolean
-  /** HTML element names to try, in order, when extracting page content. */
+  /** Structured element names to try, in order, when selecting page content. */
   selectors?: string[]
-  /** Additional HTML element names to remove from the Markdown output. */
+  /** Additional structured element names to omit from Markdown. */
   removeElements?: string[]
-  /** HTML element names to preserve as raw HTML in the Markdown output. */
+  /** Structured element names to serialize as raw HTML in Markdown. */
   keepElements?: string[]
-  /** Post-process generated Markdown and receive the output-relative HTML file name. */
+  /** Transform generated Markdown; never receives serialized HTML. */
   transform?: (markdown: string, fileName: string) => string | Promise<string>
 }
 
-const defaultSelectors = ["main", "article", "body"]
-const defaultRemoveElements = [
-  "nav",
-  "footer",
-  "header",
-  "script",
-  "style",
-  "noscript",
-  "svg",
-]
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
-const globRegExp = (pattern: string): RegExp =>
-  new RegExp(
-    `^${escapeRegExp(pattern).replaceAll("\\*", ".*").replaceAll("\\?", ".")}$`,
-  )
-
-const isExcluded = (fileName: string, patterns: readonly string[]): boolean =>
-  patterns.some(pattern => globRegExp(pattern).test(fileName))
-
-const extractMainContent = (html: string, selectors: readonly string[]): string => {
+function selectedContent(tree: Root, selectors: string[]): RootContent[] {
+  function find(nodes: RootContent[], tagName: string): RootContent[] | undefined {
+    for (const node of nodes) {
+      if (node.type !== "element") continue
+      if (node.tagName === tagName) return node.children
+      const selected = find(node.children, tagName)
+      if (selected !== undefined) return selected
+    }
+    return undefined
+  }
   for (const selector of selectors) {
-    const tagName = selector.trim()
-
-    if (!/^[A-Za-z][A-Za-z0-9:-]*$/.test(tagName)) {
-      throw new TypeError(`Markdown selector ${selector} must be an HTML element name`)
-    }
-
-    const match = html.match(
-      new RegExp(`<${escapeRegExp(tagName)}\\b[^>]*>([\\s\\S]*?)<\\/${escapeRegExp(tagName)}>`, "i"),
-    )
-
-    if (match?.[1] !== undefined) {
-      return match[1]
-    }
+    if (!/^[A-Za-z][A-Za-z0-9:-]*$/.test(selector)) throw new TypeError(`Markdown selector ${selector} must be an element name`)
+    const selected = find(tree.children, selector.toLowerCase())
+    if (selected !== undefined) return selected
   }
-
-  return html
+  return tree.children
 }
 
-const createConverter = (
-  options: StaticSiteMarkdownExportOptions,
-): TurndownService => {
-  const converter = new TurndownService({
-    bulletListMarker: "-",
-    codeBlockStyle: "fenced",
-    headingStyle: "atx",
-    hr: "---",
-  })
-
-  converter.use(gfm)
-  converter.addRule("linkFlattenContent", {
-    filter: node => node.nodeName === "A" && node.getAttribute("href") !== null,
-    replacement: (content, node) => {
-      const href = node.getAttribute("href") ?? ""
-      const title = node.getAttribute("title")
-      const flat = content.replace(/\s*\n+\s*/g, " ").trim()
-
-      if (flat === "") {
-        return href
-      }
-
-      return title === null
-        ? `[${flat}](${href})`
-        : `[${flat}](${href} "${title}")`
-    },
-  })
-  converter.addRule("fencedCodeBlock", {
-    filter: node =>
-      node.nodeName === "PRE" && node.querySelector("code") !== null,
-    replacement: (_content, node) => {
-      const code = node.querySelector("code")
-      const language =
-        code?.getAttribute("class")
-          ?.replace(/^language-/, "")
-          .split(" ")[0] ?? ""
-      const text = code?.textContent ?? ""
-
-      return `\n\`\`\`${language}\n${text.replace(/\n$/, "")}\n\`\`\`\n`
-    },
-  })
-
-  for (const element of [
-    ...defaultRemoveElements,
-    ...(options.removeElements ?? []),
-  ]) {
-    converter.remove(element)
-  }
-
-  for (const element of options.keepElements ?? []) {
-    converter.keep(element)
-  }
-
-  return converter
-}
-
-export const markdownFileNameFor = (htmlFileName: string): string => {
-  const normalizedFileName = htmlFileName.replace(/^\/+/, "")
-
-  // Treat an empty HTML basename as the root route instead of emitting the
-  // invalid `.md` path that static uploaders reject.
-  if (normalizedFileName === ".html" || normalizedFileName === "") {
-    return "index.md"
-  }
-
-  return normalizedFileName.replace(/\.html$/, ".md")
-}
-
-export const createMarkdownSiblings = async (
-  routes: ReadonlyArray<{ fileName: string; html: string }>,
-  options: StaticSiteMarkdownExportOptions,
-): Promise<ReadonlyArray<{ fileName: string; source: string }>> => {
-  const selectors = options.selectors ?? defaultSelectors
-  const exclude = options.exclude ?? []
-  const converter = createConverter(options)
-  const markdownRoutes: Array<{ fileName: string; source: string }> = []
-
-  for (const route of routes) {
-    if (!route.fileName.endsWith(".html") || isExcluded(route.fileName, exclude)) {
-      continue
-    }
-
-    let source = converter.turndown(extractMainContent(route.html, selectors))
-
-    if (options.transform !== undefined) {
-      source = await options.transform(source, route.fileName)
-    }
-
-    const markdownSource = `${source.trim()}\n`
-    const markdownFileName = markdownFileNameFor(route.fileName)
-
-    markdownRoutes.push({
-      fileName: markdownFileName,
-      source: markdownSource,
+function markdownTree(tree: Root, options: StaticSiteMarkdownExportOptions): Root {
+  const remove = new Set(["nav", "footer", "header", "script", "style", "noscript", "svg", ...(options.removeElements ?? [])])
+  const keep = new Set(options.keepElements ?? [])
+  function childrenFor(nodes: RootContent[]): RootContent[] {
+    return nodes.flatMap<RootContent>(node => {
+      if (node.type !== "element") return [node]
+      if (remove.has(node.tagName)) return []
+      if (keep.has(node.tagName)) return [{ type: "raw" as const, value: toHtml(node, { allowDangerousHtml: true }) }]
+      return [{
+        ...node,
+        properties: {
+          ...node.properties,
+          ...(typeof node.data?.originalImageUrl === "string" ? { src: node.data.originalImageUrl } : {}),
+        },
+        children: childrenFor(node.children) as Element["children"],
+      }]
     })
-
   }
+  return { type: "root", children: childrenFor(selectedContent(tree, options.selectors ?? ["main", "article", "body"])) }
+}
 
-  return markdownRoutes
+export const markdownFileNameFor = (htmlFileName: string): string =>
+  htmlFileName === ".html" || htmlFileName === ""
+    ? "index.md"
+    : htmlFileName.replace(/^\/+/, "").replace(/\.html$/, ".md")
+
+export async function createMarkdownSiblings(
+  routes: ReadonlyArray<{ fileName: string; tree: Root }>,
+  options: StaticSiteMarkdownExportOptions,
+): Promise<ReadonlyArray<{ fileName: string; source: string }>> {
+  const excluded = (options.exclude ?? []).map(pattern => new RegExp(`^${escapeRegExp(pattern).replaceAll("\\*", ".*").replaceAll("\\?", ".")}$`))
+  return Promise.all(routes
+    .filter(route => route.fileName.endsWith(".html") && !excluded.some(pattern => pattern.test(route.fileName)))
+    .map(async route => {
+      const tree = toMdast(markdownTree(route.tree, options), {
+        nodeHandlers: {
+          raw(_state, node) {
+            return { type: "html", value: "value" in node && typeof node.value === "string" ? node.value : "" }
+          },
+        },
+      })
+      const markdown = toMarkdown(tree, { bullet: "-", fences: true, extensions: [gfmToMarkdown()] })
+      const source = options.transform === undefined ? markdown : await options.transform(markdown, route.fileName)
+      return { fileName: markdownFileNameFor(route.fileName), source: `${source.trim()}\n` }
+    }))
 }

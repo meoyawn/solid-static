@@ -6,6 +6,7 @@ import { parse as parseCss } from "postcss"
 import { describe, expect, test } from "vitest"
 import { build, createServer as createViteServer, type Plugin, type UserConfig } from "vite"
 import { staticSite } from "./index.ts"
+import { createHtmlMarkdownProcessor } from "./markdown.ts"
 
 const staticSitePlugins = (client?: UserConfig) =>
   staticSite({
@@ -17,13 +18,7 @@ const staticSitePlugins = (client?: UserConfig) =>
       routing: { prefixDefaultLocale: false },
     },
     integrations: [],
-    markdown: {
-      processor: {
-        async process() {
-          return { toString: () => "" }
-        },
-      },
-    },
+    markdown: { processor: createHtmlMarkdownProcessor() },
     trailingSlash: "always",
   })
 
@@ -122,10 +117,12 @@ const createMatrixFixture = async (): Promise<string> => {
     writeFile(
       join(sourceDirectory, "pages", "index.tsx"),
       `import islandUrl from "../client/alpha.tsx?island"
+import Image from "../image.tsx"
 
 export default () => (
   <html><head><title>Alpha</title></head><body>
     <div id="alpha">Alpha fallback</div>
+    <Image />
     <script type="module" src={islandUrl}></script>
   </body></html>
 )
@@ -134,10 +131,12 @@ export default () => (
     writeFile(
       join(sourceDirectory, "pages", "beta.tsx"),
       `import islandUrl from "../client/beta.tsx?island"
+import Image from "../image.tsx"
 
 export default () => (
   <html><head><title>Beta</title></head><body>
     <div id="beta">Beta fallback</div>
+    <Image />
     <script type="module" src={islandUrl}></script>
   </body></html>
 )
@@ -148,6 +147,17 @@ export default () => (
       `export default () => (
   <html><head><title>Plain</title></head><body>No islands here</body></html>
 )
+`,
+    ),
+    writeFile(
+      join(sourceDirectory, "source.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4" fill="black"/></svg>',
+    ),
+    writeFile(
+      join(sourceDirectory, "image.tsx"),
+      `import { ResponsiveImage } from "solid-static/image"
+import source from "./source.svg?no-inline"
+export default () => <ResponsiveImage alt="Fixture" src={source} width={4} height={2} widths={[2, 4]} />
 `,
     ),
     writeFile(
@@ -283,6 +293,13 @@ describe("client island output", () => {
         styles.push(styleFile)
         const rules = cssRules(await readFile(join(outputDirectory, styleFile), "utf8"))
         expect(rules).toEqual({ [".client_" + name]: { color } })
+        const image = $("img")
+        const candidates = [image.attr("src"), ...String(image.attr("srcset")).split(", ").map(candidate => candidate.split(" ")[0])]
+        for (const candidate of candidates) {
+          if (candidate === undefined) throw new Error("Missing image variant")
+          expect(candidate.startsWith(prefix + "assets/")).toEqual(true)
+          expect(outputFiles).toContain(outputAsset(candidate, route, base))
+        }
         const javascript = await readFile(join(outputDirectory, scriptFile), "utf8")
         parseJavaScript(javascript, { ecmaVersion: 2020, sourceType: "module" })
         expect(javascript).toContain("client_" + name)

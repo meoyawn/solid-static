@@ -29,6 +29,8 @@ export default (props: { route: { fileName: string; path: string } }) =>
   <html>
     <head>
       <meta property="og:title" content="Route fixture" />
+      <link rel="canonical" href={new URL(props.route.path, "https://example.com").href} />
+      <meta property="og:url" content={new URL(props.route.path, "https://example.com").href} />
       <meta property="og:image" content="/preview.png?width=1200&amp;height=630" />
       <meta name="twitter:image" content="../preview.png" />
     </head>
@@ -66,6 +68,7 @@ export default (props: {
             },
             integrations: [solidMarkdown()],
             markdown: { processor: createHtmlMarkdownProcessor() },
+            markdownExport: { exclude: ["404.html"] },
             sitemap: { site: "https://example.com" },
             trailingSlash,
           }),
@@ -93,16 +96,16 @@ export default (props: {
         expect(openGraphUrl.length).toEqual(1)
         expect(openGraphUrl.attr("content")).toEqual(
           path.startsWith("/reference")
-            ? "https://example.com/reference-canonical/"
+            ? "/reference-canonical/"
             : pageUrl.href,
         )
 
         if (!path.startsWith("/reference")) {
           expect($('meta[property="og:image"]').attr("content")).toEqual(
-            "https://example.com/preview.png?width=1200&height=630",
+            "/preview.png?width=1200&height=630",
           )
           expect($('meta[name="twitter:image"]').attr("content")).toEqual(
-            new URL("../preview.png", pageUrl).href,
+            "../preview.png",
           )
         }
       }
@@ -217,6 +220,10 @@ export default (props: {
         expect(referenceHtml).toMatch(
           /<p[^>]*>Rendered in <strong[^>]*>Node production SSR<\/strong>\.<\/p>/,
         )
+        const markdown = await readFile(join(root, "dist", referenceFileName.replace(/\.html$/, ".md")), "utf8")
+        expect(markdown).toContain("# SSR-safe Markdown")
+        expect(markdown).toContain("**Node production SSR**")
+        await expect(readFile(join(root, "dist", "404.md"))).rejects.toMatchObject({ code: "ENOENT" })
 
         const viteServer = await createViteServer({
           appType: "spa",
