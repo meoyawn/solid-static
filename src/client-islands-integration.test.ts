@@ -50,6 +50,7 @@ const createFixture = async (): Promise<string> => {
       join(sourceDirectory, "pages", "index.tsx"),
       `import islandUrl from "../counter-island.tsx?island"
 import stylesheetUrl from "../page.css?url"
+import posterUrl from "../poster.svg?no-inline"
 
 export default () => (
   <html lang="en">
@@ -60,6 +61,11 @@ export default () => (
     <body>
       <p id="fallback">Static fallback</p>
       <div id="counter">Loading client island</div>
+      <template id="player-template">
+        <iframe src="https://video.example/embed/introduction" title="Introduction" />
+        <img src={posterUrl} alt="Video poster" />
+        <template id="nested-template"><p>Nested content</p></template>
+      </template>
       <script type="module" src={islandUrl}></script>
     </body>
   </html>
@@ -101,9 +107,24 @@ render(() => <Counter />, root)
       `body { margin: 0; }
 `,
     ),
+    writeFile(
+      join(sourceDirectory, "poster.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4" fill="black"/></svg>',
+    ),
   ])
 
   return root
+}
+
+function templatePoster(html: string): string {
+  const page = loadHtml(html)
+  const template = loadHtml(page("#player-template").html() ?? "", null, false)
+  expect(template("iframe").attr("src")).toEqual("https://video.example/embed/introduction")
+  const nested = loadHtml(template("#nested-template").html() ?? "", null, false)
+  expect(nested("p").text()).toEqual("Nested content")
+  const poster = template("img").attr("src")
+  if (poster === undefined) throw new Error("Missing template poster")
+  return poster
 }
 
 const createMatrixFixture = async (): Promise<string> => {
@@ -338,6 +359,7 @@ describe("client island output", () => {
       })
       const html = await readFile(join(outputDirectory, "index.html"), "utf8")
       const $ = loadHtml(html)
+      await readFile(join(outputDirectory, outputAsset(templatePoster(html), "index.html", "/")))
       expect($("#fallback").text()).toEqual("Static fallback")
       expect($("#counter").text()).toEqual("Loading client island")
       expect($("button")).toHaveLength(0)
@@ -379,7 +401,11 @@ describe("client island output", () => {
       if (origin === undefined) throw new Error("Missing Vite development URL")
       const response = await fetch(origin, { headers: { accept: "text/html" }, signal: AbortSignal.timeout(5_000) })
       expect(response.status).toEqual(200)
-      const $ = loadHtml(await response.text())
+      const html = await response.text()
+      const $ = loadHtml(html)
+      const poster = await fetch(new URL(templatePoster(html), origin), { signal: AbortSignal.timeout(5_000) })
+      expect(poster.status).toEqual(200)
+      expect(poster.headers.get("content-type")).toContain("image/svg+xml")
       expect($("#fallback").text()).toEqual("Static fallback")
       expect($("#counter").text()).toEqual("Loading client island")
       const stylesheet = $("link[rel=stylesheet]").map((_index, element) => $(element).attr("href")).get().find(href => href.endsWith("global.css"))

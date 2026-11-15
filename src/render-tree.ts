@@ -75,7 +75,13 @@ async function resolveValue(value: unknown, owner: Owner | null): Promise<RootCo
     const children = props.innerHTML !== undefined
       ? [{ type: "raw" as const, value: String(props.innerHTML) }]
       : await resolveValue(props.textContent ?? props.children, owner)
-    return [{ type: "element", tagName: value.tagName, properties: propertiesFor(props), children: children as Element["children"] }]
+    const element: Element = { type: "element", tagName: value.tagName, properties: propertiesFor(props), children: [] }
+    if (value.tagName === "template") {
+      element.content = { type: "root", children }
+    } else {
+      element.children = children as Element["children"]
+    }
+    return [element]
   }
   if (value.type === "root" && Array.isArray(value.children)) return resolveValue(value.children, owner)
   if (value.type === "element" && typeof value.tagName === "string" && isRecord(value.properties) && Array.isArray(value.children)) {
@@ -84,6 +90,9 @@ async function resolveValue(value: unknown, owner: Owner | null): Promise<RootCo
       tagName: value.tagName,
       properties: { ...value.properties } as Properties,
       children: await resolveValue(value.children, owner) as Element["children"],
+      ...(value.tagName === "template" && isRecord(value.content)
+        ? { content: { type: "root" as const, children: await resolveValue(value.content, owner) } }
+        : {}),
       ...(isRecord(value.data) ? { data: { ...value.data } } : {}),
     }]
   }

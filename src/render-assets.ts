@@ -205,7 +205,7 @@ export function createRenderAssets(options: RenderAssetsOptions): RenderAssets {
           node.properties = { ...node.properties, ...attributes, height: pipeline.height, width: pipeline.width, loading: "lazy", decoding: "async" }
           node.data = { ...node.data, originalImageUrl: originalUrl }
         }
-        await visit(node.children)
+        await visit(node.tagName === "template" ? node.content?.children ?? [] : node.children)
       }
     }
     await visit(tree.children)
@@ -255,7 +255,7 @@ export function createRenderAssets(options: RenderAssetsOptions): RenderAssets {
         if (node.tagName === "link" && String(node.properties.rel).split(/\s+/).includes("stylesheet") && typeof node.properties.href === "string") {
           authoredStyles.add(node.properties.href)
         }
-        visit(node.children)
+        visit(node.tagName === "template" ? node.content?.children ?? [] : node.children)
       }
     }
     visit(tree.children)
