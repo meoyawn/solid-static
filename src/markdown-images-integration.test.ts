@@ -89,7 +89,7 @@ export default props => <html><body><article><MarkdownContent content={props.ent
         if (mode === "production") {
           await build(config)
         } else {
-          server = await createServer({ ...config, server: { port: 0 } })
+          server = await createServer({ ...config, server: { host: "127.0.0.1", port: 0 } })
           await server.listen()
         }
 

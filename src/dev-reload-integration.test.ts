@@ -12,6 +12,7 @@ describe("development reloads", () => {
     const root = await mkdtemp(join(process.cwd(), ".solid-static-reload-"))
     let server: ViteDevServer | undefined
     let socket: WebSocket | undefined
+    let pending: Promise<Response> | undefined
     const rendering = new EventTarget()
     const resume = Promise.withResolvers<void>()
     let pause = false
@@ -21,10 +22,12 @@ describe("development reloads", () => {
       await mkdir(join(root, "src/pages"), { recursive: true })
       await mkdir(join(root, "src/layouts"), { recursive: true })
       const layout = join(root, "src/layouts/document.tsx")
+      const heading = join(root, "src/layouts/heading.ts")
       await Promise.all([
         writeFile(join(root, "src/pages/about.md"), "---\nlayout: ../layouts/document.tsx\n---\n# About this site\n"),
         writeFile(join(root, "src/pages/index.md"), "---\nlayout: ../layouts/document.tsx\n---\n# Still readable\n"),
-        writeFile(layout, 'export default props => <html><body><header>Before edit</header><main>{props.children}</main></body></html>'),
+        writeFile(heading, 'export default "Before edit"'),
+        writeFile(layout, 'import heading from "./heading.ts"; export default props => <html><body><header>{heading}</header><main>{props.children}</main></body></html>'),
       ])
       server = await createServer({
         configFile: false,
@@ -38,7 +41,8 @@ describe("development reloads", () => {
           markdown: { processor: {
             parse: file => processor.parse(file),
             async run(tree, file) {
-              if (pause && file.basename === "about.md") {
+              // Pause the later page after the about page has captured its layout.
+              if (pause && file.basename === "index.md") {
                 pause = false
                 rendering.dispatchEvent(new Event("paused"))
                 await resume.promise
@@ -74,12 +78,14 @@ describe("development reloads", () => {
         })
       }
       const reload = nextReload()
-      await writeFile(layout, 'export default props => <html><body><header>After edit</header><main>{props.children}</main></body></html>')
+      // Distinct modules keep overlapping edits observable through the watcher's per-path change throttle.
+      await writeFile(heading, 'export default "After edit"')
       await reload
 
       pause = true
       const paused = once(rendering, "paused", { signal: AbortSignal.timeout(2_000) })
-      const pending = fetch(origin, { signal: AbortSignal.timeout(3_000) })
+      pending = fetch(new URL("about/", origin), { signal: AbortSignal.timeout(3_000) })
+      void pending.catch(() => undefined)
       await paused
       const secondReload = nextReload()
       await writeFile(layout, 'export default props => <html><body><header>Latest edit</header><main>{props.children}</main></body></html>')
@@ -95,9 +101,12 @@ describe("development reloads", () => {
       const overlapping = await pending
       const overlappingHtml = await overlapping.text()
       expect(overlapping.status, overlappingHtml).toEqual(200)
-      expect(load(overlappingHtml)("header").text()).toEqual("Latest edit")
+      const overlappingPage = load(overlappingHtml)
+      expect(overlappingPage("header").text()).toEqual("Latest edit")
+      expect(overlappingPage("main h1").text()).toEqual("About this site")
     } finally {
       resume.resolve()
+      await pending?.catch(() => undefined)
       socket?.close()
       await server?.close()
       await rm(root, { recursive: true, force: true })
