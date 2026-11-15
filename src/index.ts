@@ -3,6 +3,7 @@ import { dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import {
+  createServerModuleRunner,
   isRunnableDevEnvironment,
   type Plugin,
   type PluginOption,
@@ -567,7 +568,6 @@ const serveStaticSite = (
   if (!environment || !isRunnableDevEnvironment(environment)) {
     throw new TypeError("Static-site development requires Vite's runnable SSR environment")
   }
-  const runner = environment.runner
 
   function createAssets() {
     return createRenderAssets({
@@ -588,16 +588,29 @@ const serveStaticSite = (
     ),
   ]
 
-  async function routes(): Promise<StaticSiteRoute[]> {
-    routesPromise ??= runner.import(entryId).then(async module => {
+  async function generateRoutes(renderAssets: RenderEnvironment): Promise<StaticSiteRoute[]> {
+    const runner = createServerModuleRunner(environment, { hmr: false })
+    try {
+      const module = await runner.import(entryId)
       if (!isGeneratedStaticSiteModule(module)) {
         throw new TypeError("Vite loaded an invalid static-site module")
       }
 
-      return requireRoutes(await module.default(assets))
-    })
+      return requireRoutes(await module.default(renderAssets))
+    } finally {
+      await runner.close()
+    }
+  }
 
-    return routesPromise
+  async function routes(): Promise<StaticSiteRoute[]> {
+    const pending = routesPromise ??= generateRoutes(assets)
+    try {
+      const generated = await pending
+      return pending === routesPromise ? generated : routes()
+    } catch (error) {
+      if (pending !== routesPromise) return routes()
+      throw error
+    }
   }
 
   const invalidateRoutes = (): void => {
@@ -609,7 +622,6 @@ const serveStaticSite = (
       environment.moduleGraph.invalidateModule(entryModule)
     }
 
-    runner.clearCache()
     server.environments.client?.hot.send({ type: "full-reload" })
   }
   const rediscover = (filePath: string): void => {
