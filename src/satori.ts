@@ -13,6 +13,8 @@ export interface SatoriImageOptions {
   fonts: SatoriImageFont[]
   width: number
   height: number
+  /** Encode an indexed PNG with at most this many colours (2–256), undithered. Suits flat or achromatic cards; omit for full-colour output. */
+  palette?: number
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -30,6 +32,11 @@ function requireOptions(value: unknown): SatoriImageOptions {
     typeof value.height !== "number" ||
     value.height < 1 ||
     value.height > 4096 ||
+    (value.palette !== undefined &&
+      (!Number.isInteger(value.palette) ||
+        typeof value.palette !== "number" ||
+        value.palette < 2 ||
+        value.palette > 256)) ||
     !Array.isArray(value.fonts) ||
     value.fonts.length === 0 ||
     !value.fonts.every(
@@ -47,7 +54,7 @@ function requireOptions(value: unknown): SatoriImageOptions {
     )
   ) {
     throw new TypeError(
-      "Invalid Satori image options: provide an element, local fonts, and dimensions between 1 and 4096",
+      "Invalid Satori image options: provide an element, local fonts, dimensions between 1 and 4096, and an optional palette of 2 to 256 colours",
     )
   }
   return value as unknown as SatoriImageOptions

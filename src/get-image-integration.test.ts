@@ -191,4 +191,36 @@ export default () => <html><head>
       await rm(root, { force: true, recursive: true })
     }
   }, 10_000)
+
+  test("encodes a social image with a requested palette as an indexed PNG", async () => {
+    const root = await mkdtemp(join(process.cwd(), ".solid-static-social-palette-"))
+    try {
+      await mkdir(join(root, "src", "pages"), { recursive: true })
+      await writeFile(join(root, "src", "card.satori.tsx"), `
+export default () => <div style={{ display: "flex", fontFamily: "Fixture", fontSize: 12, color: "white", backgroundImage: "linear-gradient(90deg, #000, #fff)", width: "100%", height: "100%" }}>Card</div>
+`)
+      await writeFile(join(root, "src", "pages", "index.tsx"), `
+import font from "@fontsource/inter/files/inter-latin-400-normal.woff?url&no-inline"
+import { getSatoriImage } from "solid-static/satori"
+import Card from "../card.satori.tsx"
+const image = await getSatoriImage({ element: Card(), fonts: [{ name: "Fixture", src: font, weight: 400 }], width: 64, height: 32, palette: 16 })
+export default () => <html><body><img src={image.src} width={image.width} height={image.height} alt="Fixture" /></body></html>
+`)
+      await build({
+        root, logLevel: "silent",
+        plugins: [staticSite({
+          collections: {},
+          i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
+          integrations: [], markdown: { processor: createHtmlMarkdownProcessor() }, trailingSlash: "always",
+        })],
+      })
+      const $ = loadHtml(await readFile(join(root, "dist", "index.html"), "utf8"))
+      const src = $("img").attr("src")
+      if (src === undefined) throw new Error("Expected a rendered social image")
+      const metadata = await sharp(await readFile(join(root, "dist", src))).metadata()
+      expect({ format: metadata.format, isPalette: metadata.isPalette, height: metadata.height, width: metadata.width }).toEqual({ format: "png", isPalette: true, height: 32, width: 64 })
+    } finally {
+      await rm(root, { force: true, recursive: true })
+    }
+  }, 10_000)
 })

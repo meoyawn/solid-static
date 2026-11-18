@@ -168,7 +168,9 @@ export function createRenderAssets(options: RenderAssetsOptions): RenderAssets {
         style: font.style ?? ("normal" as const),
       })))
       const svg = await satori(options_.element, { fonts, height: options_.height, width: options_.width })
-      const content = await sharp(Buffer.from(svg)).png().toBuffer()
+      const content = await sharp(Buffer.from(svg))
+        .png(options_.palette === undefined ? {} : { palette: true, colours: options_.palette, dither: 0, effort: 10 })
+        .toBuffer()
       const hash = createHash("sha256").update(content).digest("hex").slice(0, 16)
       return {
         format: "png", height: options_.height, width: options_.width,

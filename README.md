@@ -359,6 +359,11 @@ the element to `getSatoriImage()`. Embed imported images as data URLs to keep
 rendering independent of external image hosts. Font imports here are renderer
 inputs and do not install browser fonts or add a font stylesheet to pages.
 
+Pass `palette` (2–256) to encode an undithered indexed PNG instead of full
+colour. Flat or achromatic cards with photographic texture shrink several
+times over at 16 colours, which keeps them under the preview-size limits some
+chat apps apply to `og:image`.
+
 ## Building from a CLI
 
 Solid Static is a Vite plugin. Use Vite's existing command surface with the
