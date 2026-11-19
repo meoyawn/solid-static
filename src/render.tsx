@@ -1,4 +1,5 @@
-import type { Component, JSX } from "solid-js"
+import type { Component } from "solid-js"
+import type { JSX } from "@solidjs/web"
 import type { Root } from "hast"
 import type { LoadedCollections, MarkdownHeading, RenderedMarkdown } from "./content.ts"
 import { setCollections } from "./runtime.ts"

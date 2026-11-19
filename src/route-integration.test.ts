@@ -38,7 +38,7 @@ export default (props: { route: { fileName: string; path: string } }) =>
   </html>
 `
       const layoutComponent = `
-import type { JSX } from "solid-js"
+import type { JSX } from "@solidjs/web"
 
 export default (props: {
   children: JSX.Element

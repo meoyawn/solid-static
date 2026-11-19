@@ -10,7 +10,7 @@ import {
   type UserConfig,
   type ViteDevServer,
 } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import {
   loadCollections,
   type CollectionDefinitions,
@@ -864,7 +864,7 @@ export const staticSite = (options: StaticSiteOptions): PluginOption => {
     markdownImages(serialize),
     ...options.integrations,
     clientIslands.plugin,
-    solid({ ssr: true, hot: false, exclude: /\.satori\.tsx$/ }),
+    solid({ ssr: true, refresh: false, exclude: /\.satori\.tsx$/ }),
     staticSitePlugin(options, clientIslands),
   ]
 }

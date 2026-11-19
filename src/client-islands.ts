@@ -9,7 +9,7 @@ import {
   type ResolvedConfig,
   type UserConfig,
 } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 
 interface RegisteredIsland {
   entryPath: string

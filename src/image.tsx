@@ -1,4 +1,5 @@
-import { splitProps, type JSX } from "solid-js"
+import { omit } from "solid-js"
+import type { JSX } from "@solidjs/web"
 import { deferred, jsx } from "./jsx-runtime.ts"
 import { renderEnvironment } from "./render-environment.ts"
 import {
@@ -31,17 +32,17 @@ export interface ResponsiveImageProps
 }
 
 export function ResponsiveImage(props: ResponsiveImageProps): JSX.Element {
-  const [local, attributes] = splitProps(props, [
+  const attributes = omit(props,
     "decoding", "fetchpriority", "format", "layout", "loading", "priority", "sizes", "widths",
-  ])
+  )
 
   return deferred(async () => jsx("img", {
     ...attributes,
     ...await renderEnvironment().responsiveImage(props),
-    "data-astro-image": local.layout === undefined || local.layout === "none" ? undefined : local.layout,
-    decoding: local.decoding ?? (local.priority ? "sync" : "async"),
-    fetchpriority: local.fetchpriority ?? (local.priority ? "high" : undefined),
-    loading: local.loading ?? (local.priority ? "eager" : "lazy"),
-    sizes: local.sizes ?? getSizesAttribute({ layout: local.layout ?? "none", width: props.width }),
+    "data-astro-image": props.layout === undefined || props.layout === "none" ? undefined : props.layout,
+    decoding: props.decoding ?? (props.priority ? "sync" : "async"),
+    fetchpriority: props.fetchpriority ?? (props.priority ? "high" : undefined),
+    loading: props.loading ?? (props.priority ? "eager" : "lazy"),
+    sizes: props.sizes ?? getSizesAttribute({ layout: props.layout ?? "none", width: props.width }),
   }))
 }
