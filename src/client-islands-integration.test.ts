@@ -75,7 +75,7 @@ export default () => (
     writeFile(
       join(sourceDirectory, "counter-island.tsx"),
       `import { createSignal } from "solid-js"
-import { render } from "solid-js/web"
+import { render } from "@solidjs/web"
 import "./counter.css"
 
 const Counter = () => {
@@ -191,7 +191,7 @@ export const sharedPayload = "shared dependency payload retained as one chunk"
     ),
     writeFile(
       join(clientDirectory, "alpha.tsx"),
-      `import { render } from "solid-js/web"
+      `import { render } from "@solidjs/web"
 import { definedLabel, mode, sharedPayload, transformedLabel } from "@client/shared.ts"
 import styles from "./alpha.module.css"
 
@@ -202,7 +202,7 @@ render(() => <button class={styles.alpha}>{definedLabel}:{transformedLabel}:{mod
     ),
     writeFile(
       join(clientDirectory, "beta.tsx"),
-      `import { render } from "solid-js/web"
+      `import { render } from "@solidjs/web"
 import { definedLabel, mode, sharedPayload, transformedLabel } from "@client/shared.ts"
 import styles from "./beta.module.css"
 

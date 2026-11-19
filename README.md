@@ -144,7 +144,7 @@ export default () => (
 
 ```tsx
 import { createSignal } from "solid-js";
-import { render } from "solid-js/web";
+import { render } from "@solidjs/web";
 
 const Counter = () => {
   const [count, setCount] = createSignal(0);

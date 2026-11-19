@@ -51,11 +51,13 @@
     }
   },
   "peerDependencies": {
-    "solid-js": "^1.9.14",
-    "vite": "^8.3.5"
+    "@solidjs/web": "^2.0.3",
+    "solid-js": "^2.0.3",
+    "vite": "^8.3.8"
   },
   "dependencies": {
     "@mdx-js/rollup": "^3.1.1",
+    "@solidjs/vite-plugin": "^3.0.1",
     "@types/hast": "^3.0.5",
     "@types/mdast": "^4.0.4",
     "github-slugger": "^2.0.0",
@@ -74,11 +76,11 @@
     "sharp": "^0.35.3",
     "unified": "11.0.5",
     "unist-util-visit": "^5.1.0",
-    "vfile": "^6.0.3",
-    "vite-plugin-solid": "^2.11.14"
+    "vfile": "^6.0.3"
   },
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
+    "@solidjs/web": "^2.0.3",
     "@types/estree": "^1.0.9",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.2.0",
@@ -87,15 +89,15 @@
     "oxlint": "^1.78.0",
     "postcss": "^8.5.28",
     "remark-parse": "^11.0.0",
-    "solid-js": "^1.9.14",
+    "solid-js": "^2.0.3",
     "typescript": "^7.0.2",
-    "vite": "8.3.5",
+    "vite": "8.3.8",
     "vitest": "^4.1.10"
   },
   "devEngines": {
     "packageManager": {
       "name": "aube",
-      "version": "2.5.1",
+      "version": "2.10.1",
       "onFail": "warn"
     }
   }
