@@ -4,6 +4,7 @@ import type { GeneratedImageRequest, ImageMetadata } from "./get-image.ts"
 import type { ResponsiveImageProps } from "./image.tsx"
 import type { SatoriImageOptions } from "./satori.ts"
 import type { RenderedMarkdown } from "./content.ts"
+import { processShared } from "./shared-state.ts"
 
 export interface RenderEnvironment {
   image: (request: GeneratedImageRequest) => Promise<ImageMetadata>
@@ -15,7 +16,11 @@ export interface RenderEnvironment {
   markdown: (file: { path: string; value: string }) => Promise<RenderedMarkdown>
 }
 
-const environments = new AsyncLocalStorage<RenderEnvironment>()
+const environments = processShared(
+  "render-environments",
+  () => new AsyncLocalStorage<RenderEnvironment>(),
+  (value): value is AsyncLocalStorage<RenderEnvironment> => value instanceof AsyncLocalStorage,
+)
 
 export const withRenderEnvironment = <T>(environment: RenderEnvironment, render: () => T): T =>
   environments.run(environment, render)
