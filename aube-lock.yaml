@@ -57,13 +57,13 @@ importers:
         specifier: ^11.1.2
         version: 11.1.2
       satori:
-        specifier: 0.35.0
+        specifier: ^0.35.0
         version: 0.35.0
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@26.2.0)
       unified:
-        specifier: 11.0.5
+        specifier: ^11.0.5
         version: 11.0.5
       unist-util-visit:
         specifier: ^5.1.0
@@ -109,7 +109,7 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       vite:
-        specifier: 8.3.8
+        specifier: ^8.3.8
         version: 8.3.8(@types/node@26.2.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.10

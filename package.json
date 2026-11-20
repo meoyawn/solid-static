@@ -72,9 +72,9 @@
     "remark-frontmatter": "^5.0.0",
     "remark-mdx-frontmatter": "^5.2.0",
     "remark-rehype": "^11.1.2",
-    "satori": "0.35.0",
+    "satori": "^0.35.0",
     "sharp": "^0.35.3",
-    "unified": "11.0.5",
+    "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "vfile": "^6.0.3"
   },
@@ -91,7 +91,7 @@
     "remark-parse": "^11.0.0",
     "solid-js": "^2.0.3",
     "typescript": "^7.0.2",
-    "vite": "8.3.8",
+    "vite": "^8.3.8",
     "vitest": "^4.1.10"
   },
   "devEngines": {
