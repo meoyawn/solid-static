@@ -1,7 +1,4 @@
-import type {
-  LoadedCollectionEntry,
-  LoadedCollections,
-} from "./content.ts"
+import type { LoadedCollectionEntry, LoadedCollections } from "./content.ts"
 import { processShared } from "./shared-state.ts"
 
 interface CollectionStore {

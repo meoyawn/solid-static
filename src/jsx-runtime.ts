@@ -11,7 +11,10 @@ export interface RenderComponent {
   render: () => unknown
 }
 
-export function jsx(type: unknown, props: Record<string, unknown> | null): JSX.Element {
+export function jsx(
+  type: unknown,
+  props: Record<string, unknown> | null,
+): JSX.Element {
   if (typeof type === "string") {
     const node: RenderElement = {
       type: "solid-static:element",
@@ -31,7 +34,8 @@ export function jsx(type: unknown, props: Record<string, unknown> | null): JSX.E
 export const jsxs = jsx
 export const jsxDEV = jsx
 
-export const Fragment = (props: { children?: JSX.Element }): JSX.Element => props.children
+export const Fragment = (props: { children?: JSX.Element }): JSX.Element =>
+  props.children
 
 export function deferred(render: () => unknown): JSX.Element {
   const node: RenderComponent = { type: "solid-static:component", render }

@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { extname, join, relative, resolve } from "node:path"
-import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import type { Root as HastRoot } from "hast"
+import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import type { Root as MdastRoot } from "mdast"
 import { VFile } from "vfile"
 import { htmlForTree } from "./render-tree.ts"
@@ -150,7 +150,10 @@ const loadCollection = async (
       const data = definition.schema?.(parsed.data, relativePath) ?? parsed.data
       const rendered =
         extname(filePath) === ".md" && markdownProcessor !== undefined
-          ? await compileMarkdown(markdownProcessor, { path: filePath, value: parsed.body })
+          ? await compileMarkdown(markdownProcessor, {
+              path: filePath,
+              value: parsed.body,
+            })
           : undefined
 
       return {

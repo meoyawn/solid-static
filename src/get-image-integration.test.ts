@@ -1,10 +1,17 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { load as loadHtml } from "cheerio"
 import sharp from "sharp"
-import { afterEach, describe, expect, test } from "vitest"
 import { build } from "vite"
+import { afterEach, describe, expect, test } from "vitest"
 import { staticSite } from "./index.ts"
 import { createHtmlMarkdownProcessor } from "./markdown.ts"
 
@@ -115,9 +122,9 @@ export default () => (
     expect(imageUrls[0]).toEqual(imageUrls[1])
     expect(imageUrls[0]).toMatch(/^\/assets\/source-[\w-]+\.jpg$/)
 
-    const sharedImageUrl = /<meta name="shared-image" content="(?<url>[^"]+)"/.exec(
-      html,
-    )?.groups?.url
+    const sharedImageUrl =
+      /<meta name="shared-image" content="(?<url>[^"]+)"/.exec(html)?.groups
+        ?.url
     const responsiveImageUrl = /<img[^>]+src="(?<url>[^"]+)"/.exec(html)?.groups
       ?.url
 
@@ -125,7 +132,9 @@ export default () => (
     expect(responsiveImageUrl).toEqual(sharedImageUrl)
 
     const emittedImages = await readdir(join(root, "dist", "assets"))
-    const jpegImages = emittedImages.filter(fileName => fileName.endsWith(".jpg"))
+    const jpegImages = emittedImages.filter(fileName =>
+      fileName.endsWith(".jpg"),
+    )
     const webpImages = emittedImages.filter(fileName =>
       fileName.endsWith(".webp"),
     )
@@ -152,10 +161,15 @@ export default () => (
     const root = await mkdtemp(join(process.cwd(), ".solid-static-social-"))
     try {
       await mkdir(join(root, "src", "pages"), { recursive: true })
-      await writeFile(join(root, "src", "card.satori.tsx"), `
+      await writeFile(
+        join(root, "src", "card.satori.tsx"),
+        `
 export default () => <div style={{ display: "flex", fontFamily: "Fixture", fontSize: 12, color: "black", backgroundColor: "white", width: "100%", height: "100%" }}>Card</div>
-`)
-      await writeFile(join(root, "src", "pages", "index.tsx"), `
+`,
+      )
+      await writeFile(
+        join(root, "src", "pages", "index.tsx"),
+        `
 import font from "@fontsource/inter/files/inter-latin-400-normal.woff?url&no-inline"
 import { getSatoriImage } from "solid-static/satori"
 import Card from "../card.satori.tsx"
@@ -166,59 +180,109 @@ export default () => <html><head>
   <meta property="og:image" content={new URL(first.src, "https://example.com").href} />
   <meta name="twitter:image" content={new URL(second.src, "https://example.com").href} />
 </head><body><img src={first.src} width={first.width} height={first.height} alt="Fixture" /></body></html>
-`)
+`,
+      )
       await build({
-        root, logLevel: "silent",
-        plugins: [staticSite({
-          collections: {},
-          i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
-          integrations: [], markdown: { processor: createHtmlMarkdownProcessor() }, trailingSlash: "always",
-        })],
+        root,
+        logLevel: "silent",
+        plugins: [
+          staticSite({
+            collections: {},
+            i18n: {
+              defaultLocale: "en",
+              locales: ["en"],
+              routing: { prefixDefaultLocale: false },
+            },
+            integrations: [],
+            markdown: { processor: createHtmlMarkdownProcessor() },
+            trailingSlash: "always",
+          }),
+        ],
       })
-      const $ = loadHtml(await readFile(join(root, "dist", "index.html"), "utf8"))
+      const $ = loadHtml(
+        await readFile(join(root, "dist", "index.html"), "utf8"),
+      )
       const src = $("img").attr("src")
       if (src === undefined) throw new Error("Expected a rendered social image")
       expect(src).toMatch(/^\/assets\/social-[\w-]+\.png$/)
-      expect($('meta[property="og:image"]').attr("content")).toEqual(`https://example.com${src}`)
-      expect($('meta[name="twitter:image"]').attr("content")).toEqual(`https://example.com${src}`)
+      expect($('meta[property="og:image"]').attr("content")).toEqual(
+        `https://example.com${src}`,
+      )
+      expect($('meta[name="twitter:image"]').attr("content")).toEqual(
+        `https://example.com${src}`,
+      )
       const content = await readFile(join(root, "dist", src))
       const metadata = await sharp(content).metadata()
-      expect({ format: metadata.format, height: metadata.height, width: metadata.width }).toEqual({ format: "png", height: 32, width: 64 })
+      expect({
+        format: metadata.format,
+        height: metadata.height,
+        width: metadata.width,
+      }).toEqual({ format: "png", height: 32, width: 64 })
       expect(content.length).toBeGreaterThan(64)
       expect(content.length).toBeLessThan(32_768)
-      expect((await readdir(join(root, "dist", "assets"))).filter(name => name.endsWith(".png"))).toHaveLength(1)
+      expect(
+        (await readdir(join(root, "dist", "assets"))).filter(name =>
+          name.endsWith(".png"),
+        ),
+      ).toHaveLength(1)
     } finally {
       await rm(root, { force: true, recursive: true })
     }
   }, 10_000)
 
   test("encodes a social image with a requested palette as an indexed PNG", async () => {
-    const root = await mkdtemp(join(process.cwd(), ".solid-static-social-palette-"))
+    const root = await mkdtemp(
+      join(process.cwd(), ".solid-static-social-palette-"),
+    )
     try {
       await mkdir(join(root, "src", "pages"), { recursive: true })
-      await writeFile(join(root, "src", "card.satori.tsx"), `
+      await writeFile(
+        join(root, "src", "card.satori.tsx"),
+        `
 export default () => <div style={{ display: "flex", fontFamily: "Fixture", fontSize: 12, color: "white", backgroundImage: "linear-gradient(90deg, #000, #fff)", width: "100%", height: "100%" }}>Card</div>
-`)
-      await writeFile(join(root, "src", "pages", "index.tsx"), `
+`,
+      )
+      await writeFile(
+        join(root, "src", "pages", "index.tsx"),
+        `
 import font from "@fontsource/inter/files/inter-latin-400-normal.woff?url&no-inline"
 import { getSatoriImage } from "solid-static/satori"
 import Card from "../card.satori.tsx"
 const image = await getSatoriImage({ element: Card(), fonts: [{ name: "Fixture", src: font, weight: 400 }], width: 64, height: 32, palette: 16 })
 export default () => <html><body><img src={image.src} width={image.width} height={image.height} alt="Fixture" /></body></html>
-`)
+`,
+      )
       await build({
-        root, logLevel: "silent",
-        plugins: [staticSite({
-          collections: {},
-          i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
-          integrations: [], markdown: { processor: createHtmlMarkdownProcessor() }, trailingSlash: "always",
-        })],
+        root,
+        logLevel: "silent",
+        plugins: [
+          staticSite({
+            collections: {},
+            i18n: {
+              defaultLocale: "en",
+              locales: ["en"],
+              routing: { prefixDefaultLocale: false },
+            },
+            integrations: [],
+            markdown: { processor: createHtmlMarkdownProcessor() },
+            trailingSlash: "always",
+          }),
+        ],
       })
-      const $ = loadHtml(await readFile(join(root, "dist", "index.html"), "utf8"))
+      const $ = loadHtml(
+        await readFile(join(root, "dist", "index.html"), "utf8"),
+      )
       const src = $("img").attr("src")
       if (src === undefined) throw new Error("Expected a rendered social image")
-      const metadata = await sharp(await readFile(join(root, "dist", src))).metadata()
-      expect({ format: metadata.format, isPalette: metadata.isPalette, height: metadata.height, width: metadata.width }).toEqual({ format: "png", isPalette: true, height: 32, width: 64 })
+      const metadata = await sharp(
+        await readFile(join(root, "dist", src)),
+      ).metadata()
+      expect({
+        format: metadata.format,
+        isPalette: metadata.isPalette,
+        height: metadata.height,
+        width: metadata.width,
+      }).toEqual({ format: "png", isPalette: true, height: 32, width: 64 })
     } finally {
       await rm(root, { force: true, recursive: true })
     }

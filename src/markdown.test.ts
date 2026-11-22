@@ -16,9 +16,13 @@ describe("Markdown headings", () => {
       { depth: 2, slug: "日本語", text: "日本語" },
       { depth: 2, slug: "section", text: "" },
     ])
-    expect(String(result)).toContain('<h2 id="start-here">Start <strong>here</strong></h2>')
+    expect(String(result)).toContain(
+      '<h2 id="start-here">Start <strong>here</strong></h2>',
+    )
     for (const heading of result.data.headings ?? []) {
-      expect(String(result)).toContain(`<h${heading.depth} id="${heading.slug}">`)
+      expect(String(result)).toContain(
+        `<h${heading.depth} id="${heading.slug}">`,
+      )
     }
   })
 

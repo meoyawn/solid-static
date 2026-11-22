@@ -13,7 +13,10 @@ export interface SatoriImageOptions {
   fonts: SatoriImageFont[]
   width: number
   height: number
-  /** Encode an indexed PNG with at most this many colours (2–256), undithered. Suits flat or achromatic cards; omit for full-colour output. */
+  /**
+   * Encode an indexed PNG with at most this many colours (2–256), undithered.
+   * Suits flat or achromatic cards; omit for full-colour output.
+   */
   palette?: number
 }
 
@@ -40,7 +43,7 @@ function requireOptions(value: unknown): SatoriImageOptions {
     !Array.isArray(value.fonts) ||
     value.fonts.length === 0 ||
     !value.fonts.every(
-      (font) =>
+      font =>
         isRecord(font) &&
         typeof font.name === "string" &&
         font.name !== "" &&
@@ -60,7 +63,10 @@ function requireOptions(value: unknown): SatoriImageOptions {
   return value as unknown as SatoriImageOptions
 }
 
-/** Render a stateless .satori.tsx template to a PNG in the static-site image pipeline. */
+/**
+ * Render a stateless .satori.tsx template to a PNG in the static-site image
+ * pipeline.
+ */
 export async function getSatoriImage(options: SatoriImageOptions): Promise<{
   src: string
   width: number
@@ -70,15 +76,12 @@ export async function getSatoriImage(options: SatoriImageOptions): Promise<{
     throw new TypeError(
       "getSatoriImage() is only available during server rendering",
     )
-  JSON.stringify(
-    requireOptions(options),
-    (_key, value: unknown) => {
-      if (typeof value === "function")
-        throw new TypeError(
-          "Satori templates must contain only rendered, stateless elements",
-        )
-      return value
-    },
-  )
+  JSON.stringify(requireOptions(options), (_key, value: unknown) => {
+    if (typeof value === "function")
+      throw new TypeError(
+        "Satori templates must contain only rendered, stateless elements",
+      )
+    return value
+  })
   return renderEnvironment().satoriImage(options)
 }

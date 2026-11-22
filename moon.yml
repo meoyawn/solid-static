@@ -11,12 +11,24 @@ fileGroups:
     - tsconfig*.json
 tasks:
   lint:
-    command: aube exec oxlint --config .oxlintrc.json src
+    description: Format every TypeScript file with oxfmt, then lint them all with oxlint.
     inputs:
+      - "**/*.{ts,tsx}"
+      - "!node_modules/**/*"
+      - "!dist/**/*"
+      - .oxfmtrc.jsonc
       - .oxlintrc.json
-      - src/**/*
       - package.json
       - /aube-lock.yaml
+    script: |-
+      set -euo pipefail
+      # Tracked and new files Git doesn't ignore (no dist/ or fixtures' output).
+      files=()
+      while IFS= read -r -d '' file; do
+        [[ -f $file ]] && files+=("$file")
+      done < <(git ls-files -z --cached --others --exclude-standard -- '*.ts' '*.tsx')
+      aube exec oxfmt "${files[@]}"
+      aube exec oxlint --config .oxlintrc.json "${files[@]}"
   build:
     command: aube exec tsc -p tsconfig.build.json
     inputs:

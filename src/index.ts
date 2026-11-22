@@ -1,6 +1,8 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import solid from "@solidjs/vite-plugin"
+import type { Root } from "hast"
 import { CORE_SCHEMA, load, timestampTag } from "js-yaml"
 import {
   createServerModuleRunner,
@@ -10,24 +12,19 @@ import {
   type UserConfig,
   type ViteDevServer,
 } from "vite"
-import solid from "@solidjs/vite-plugin"
+import { createClientIslands, type ClientIslands } from "./client-islands.ts"
 import {
   loadCollections,
   type CollectionDefinitions,
   type MarkdownProcessor,
 } from "./content.ts"
 import {
-  createClientIslands,
-  type ClientIslands,
-} from "./client-islands.ts"
-import {
   createMarkdownSiblings,
   type StaticSiteMarkdownExportOptions,
 } from "./markdown-export.ts"
 import { markdownImages } from "./markdown-images.ts"
-import type { Root } from "hast"
-import type { RenderEnvironment } from "./render-environment.ts"
 import { createRenderAssets } from "./render-assets.ts"
+import type { RenderEnvironment } from "./render-environment.ts"
 import { renderJsx } from "./render-jsx.ts"
 
 const yamlSchema = CORE_SCHEMA.withTags(timestampTag)
@@ -99,7 +96,10 @@ const resolvedEntryId = `\0${entryId}`
 const devRoutesPath = "/@solid-static/routes.json"
 const pageExtensions = new Set([".md", ".mdx", ".tsx"])
 const rendererPath = fileURLToPath(
-  new URL(import.meta.url.endsWith(".ts") ? "./render.tsx" : "./render.jsx", import.meta.url),
+  new URL(
+    import.meta.url.endsWith(".ts") ? "./render.tsx" : "./render.jsx",
+    import.meta.url,
+  ),
 )
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -114,7 +114,9 @@ const isStaticSiteRoute = (value: unknown): value is StaticSiteRoute =>
   isRecord(value) &&
   typeof value.fileName === "string" &&
   typeof value.html === "string" &&
-  isRecord(value.tree) && value.tree.type === "root" && Array.isArray(value.tree.children)
+  isRecord(value.tree) &&
+  value.tree.type === "root" &&
+  Array.isArray(value.tree.children)
 
 const requireRoutes = (value: unknown): StaticSiteRoute[] => {
   if (!Array.isArray(value) || !value.every(isStaticSiteRoute)) {
@@ -134,7 +136,8 @@ async function renderGeneratedModule(
     const modulePath = join(directory, "entry.mjs")
     await writeFile(modulePath, code)
     const module: unknown = await import(pathToFileURL(modulePath).href)
-    if (!isGeneratedStaticSiteModule(module)) throw new TypeError("Vite emitted an invalid static-site module")
+    if (!isGeneratedStaticSiteModule(module))
+      throw new TypeError("Vite emitted an invalid static-site module")
     return requireRoutes(await module.default(environment))
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -185,7 +188,6 @@ const validateOptions = (options: ResolvedStaticSiteOptions): void => {
       }
     }
   }
-
 }
 
 const escapeXml = (value: string): string =>
@@ -226,7 +228,8 @@ export const createSitemap = (
   trailingSlash: StaticSiteOptions["trailingSlash"],
 ): string => {
   const site = options.site.replace(/\/+$/, "")
-  const lastmod = options.lastmod === undefined ? "" : `<lastmod>${options.lastmod}</lastmod>`
+  const lastmod =
+    options.lastmod === undefined ? "" : `<lastmod>${options.lastmod}</lastmod>`
   const urls = routes.flatMap(route => {
     const path = publicPathForFileName(route.fileName, trailingSlash)
 
@@ -360,17 +363,11 @@ const discoverPages = async (
         throw new TypeError(`${relativePath} requires a layout in frontmatter`)
       }
 
-      if (
-        declaredLocale !== undefined &&
-        typeof declaredLocale !== "string"
-      ) {
+      if (declaredLocale !== undefined && typeof declaredLocale !== "string") {
         throw new TypeError(`${relativePath} frontmatter lang must be a string`)
       }
 
-      if (
-        declaredLocale !== undefined &&
-        declaredLocale !== locale
-      ) {
+      if (declaredLocale !== undefined && declaredLocale !== locale) {
         throw new TypeError(
           `${relativePath} declares locale ${declaredLocale} but routes as ${locale}`,
         )
@@ -386,14 +383,11 @@ const discoverPages = async (
     }),
   )
 
-  return pages.filter(
-    (page): page is DiscoveredPage => page !== undefined,
-  )
+  return pages.filter((page): page is DiscoveredPage => page !== undefined)
 }
 
-const isDocumentPage = (
-  page: DiscoveredPage,
-): page is DiscoveredDocumentPage => page.kind === "document"
+const isDocumentPage = (page: DiscoveredPage): page is DiscoveredDocumentPage =>
+  page.kind === "document"
 
 const isComponentPage = (
   page: DiscoveredPage,
@@ -486,24 +480,24 @@ const virtualEntry = async (
     )
     .join(",\n")
   const collectionValues = Object.fromEntries(
-    Object.entries(collections).map(([name, entries]) => [
-      name,
-      entries,
-    ]),
+    Object.entries(collections).map(([name, entries]) => [name, entries]),
   )
   const mdxEntries = Object.entries(collections).flatMap(
-    ([collection, entries]) => entries
-      .filter(entry => extname(entry.filePath) === ".mdx")
-      .map(entry => ({ collection, entry })),
+    ([collection, entries]) =>
+      entries
+        .filter(entry => extname(entry.filePath) === ".mdx")
+        .map(entry => ({ collection, entry })),
   )
   const collectionImports = mdxEntries
-    .map(({ entry }, index) =>
-      `const CollectionDocument${index} = await import(${JSON.stringify(entry.filePath)})`,
+    .map(
+      ({ entry }, index) =>
+        `const CollectionDocument${index} = await import(${JSON.stringify(entry.filePath)})`,
     )
     .join("\n")
   const collectionDocuments = mdxEntries
-    .map(({ collection, entry }, index) =>
-      `{ collection: ${JSON.stringify(collection)}, id: ${JSON.stringify(entry.id)}, Content: CollectionDocument${index}.default, headings: CollectionDocument${index}.headings }`,
+    .map(
+      ({ collection, entry }, index) =>
+        `{ collection: ${JSON.stringify(collection)}, id: ${JSON.stringify(entry.id)}, Content: CollectionDocument${index}.default, headings: CollectionDocument${index}.headings }`,
     )
     .join(",\n")
 
@@ -566,7 +560,9 @@ const serveStaticSite = (
   let routesPromise: Promise<StaticSiteRoute[]> | undefined
   const environment = server.environments.ssr
   if (!environment || !isRunnableDevEnvironment(environment)) {
-    throw new TypeError("Static-site development requires Vite's runnable SSR environment")
+    throw new TypeError(
+      "Static-site development requires Vite's runnable SSR environment",
+    )
   }
 
   function createAssets() {
@@ -576,8 +572,16 @@ const serveStaticSite = (
       devClient: server.config.server.hmr !== false,
       markdownProcessor: options.markdown.processor,
       root: server.config.root,
-      styleSheets: () => [...new Set([...environment.moduleGraph.idToModuleMap.values()]
-        .map(module => module.url).filter(url => url.endsWith(".css")))].sort().map(url => url.replace(/^\//, "")),
+      styleSheets: () =>
+        [
+          ...new Set(
+            [...environment.moduleGraph.idToModuleMap.values()]
+              .map(module => module.url)
+              .filter(url => url.endsWith(".css")),
+          ),
+        ]
+          .sort()
+          .map(url => url.replace(/^\//, "")),
     })
   }
   let assets = createAssets()
@@ -588,7 +592,9 @@ const serveStaticSite = (
     ),
   ]
 
-  async function generateRoutes(renderAssets: RenderEnvironment): Promise<StaticSiteRoute[]> {
+  async function generateRoutes(
+    renderAssets: RenderEnvironment,
+  ): Promise<StaticSiteRoute[]> {
     const runner = createServerModuleRunner(environment, { hmr: false })
     try {
       const module = await runner.import(entryId)
@@ -603,7 +609,7 @@ const serveStaticSite = (
   }
 
   async function routes(): Promise<StaticSiteRoute[]> {
-    const pending = routesPromise ??= generateRoutes(assets)
+    const pending = (routesPromise ??= generateRoutes(assets))
     try {
       const generated = await pending
       return pending === routesPromise ? generated : routes()
@@ -640,89 +646,95 @@ const serveStaticSite = (
   server.watcher.on("unlink", rediscover)
   server.watcher.on("change", rediscover)
 
-  server.middlewares.use(function staticSiteMiddleware(
-    request,
-    response,
-    next,
-  ) {
-    async function handleRequest(): Promise<void> {
-      if (request.url === undefined) {
-        next()
-        return
-      }
-
-      const requestUrl = new URL(request.url, "http://solid-static.local")
-      const assetTarget = assets.redirects.get(requestUrl.pathname)
-
-      if (assetTarget !== undefined) {
-        response.statusCode = 302
-        response.setHeader("Location", assetTarget)
-        response.end()
-        return
-      }
-
-      const content = assets.files.get(requestUrl.pathname)
-      if (content !== undefined) {
-        const extension = extname(requestUrl.pathname).slice(1)
-        response.statusCode = 200
-        response.setHeader("Content-Type", extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`)
-        response.end(request.method === "HEAD" ? undefined : content)
-        return
-      }
-
-      if (requestUrl.pathname === devRoutesPath) {
-        response.statusCode = 200
-        response.setHeader("Content-Type", "application/json")
-        response.end(
-          JSON.stringify((await routes()).map(route => route.fileName)),
-        )
-        return
-      }
-
-      if (request.method !== "GET" && request.method !== "HEAD") {
-        next()
-        return
-      }
-
-      const generatedRoutes = await routes()
-      let route = generatedRoutes.find(
-        candidate =>
-          candidate.fileName ===
-          requestFileName(requestUrl.pathname, options.trailingSlash),
-      )
-      let statusCode = 200
-
-      if (route === undefined) {
-        const acceptsHtml = request.headers.accept?.includes("text/html") ?? false
-        const requestedExtension = extname(requestUrl.pathname)
-
-        if (
-          !acceptsHtml ||
-          (requestedExtension !== "" && requestedExtension !== ".html")
-        ) {
+  server.middlewares.use(
+    function staticSiteMiddleware(request, response, next) {
+      async function handleRequest(): Promise<void> {
+        if (request.url === undefined) {
           next()
           return
         }
 
-        route = generatedRoutes.find(candidate => candidate.fileName === "404.html")
+        const requestUrl = new URL(request.url, "http://solid-static.local")
+        const assetTarget = assets.redirects.get(requestUrl.pathname)
+
+        if (assetTarget !== undefined) {
+          response.statusCode = 302
+          response.setHeader("Location", assetTarget)
+          response.end()
+          return
+        }
+
+        const content = assets.files.get(requestUrl.pathname)
+        if (content !== undefined) {
+          const extension = extname(requestUrl.pathname).slice(1)
+          response.statusCode = 200
+          response.setHeader(
+            "Content-Type",
+            extension === "jpg" || extension === "jpeg"
+              ? "image/jpeg"
+              : `image/${extension}`,
+          )
+          response.end(request.method === "HEAD" ? undefined : content)
+          return
+        }
+
+        if (requestUrl.pathname === devRoutesPath) {
+          response.statusCode = 200
+          response.setHeader("Content-Type", "application/json")
+          response.end(
+            JSON.stringify((await routes()).map(route => route.fileName)),
+          )
+          return
+        }
+
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          next()
+          return
+        }
+
+        const generatedRoutes = await routes()
+        let route = generatedRoutes.find(
+          candidate =>
+            candidate.fileName ===
+            requestFileName(requestUrl.pathname, options.trailingSlash),
+        )
+        let statusCode = 200
 
         if (route === undefined) {
-          next()
-          return
+          const acceptsHtml =
+            request.headers.accept?.includes("text/html") ?? false
+          const requestedExtension = extname(requestUrl.pathname)
+
+          if (
+            !acceptsHtml ||
+            (requestedExtension !== "" && requestedExtension !== ".html")
+          ) {
+            next()
+            return
+          }
+
+          route = generatedRoutes.find(
+            candidate => candidate.fileName === "404.html",
+          )
+
+          if (route === undefined) {
+            next()
+            return
+          }
+
+          statusCode = 404
         }
 
-        statusCode = 404
+        response.statusCode = statusCode
+        response.setHeader("Content-Type", "text/html; charset=utf-8")
+        response.end(request.method === "HEAD" ? undefined : route.html)
       }
 
-      response.statusCode = statusCode
-      response.setHeader("Content-Type", "text/html; charset=utf-8")
-      response.end(request.method === "HEAD" ? undefined : route.html)
-    }
-
-    void handleRequest().catch(error => {
-      next(error)
-    })
-  })
+      void handleRequest().catch(error => {
+        next(error)
+      })
+    },
+  )
 
   return invalidateRoutes
 }
@@ -799,9 +811,14 @@ const staticSitePlugin = (
         markdownProcessor: options.markdown.processor,
         root: dirname(dirname(options.pagesDirectory)),
         styleSheets: () => [...(entry.viteMetadata?.importedCss ?? [])].sort(),
-        emit: (name, source) => this.getFileName(this.emitFile({ type: "asset", name, source })),
+        emit: (name, source) =>
+          this.getFileName(this.emitFile({ type: "asset", name, source })),
       })
-      const routes = await renderGeneratedModule(entry.code, dirname(dirname(options.pagesDirectory)), assets)
+      const routes = await renderGeneratedModule(
+        entry.code,
+        dirname(dirname(options.pagesDirectory)),
+        assets,
+      )
 
       for (const [fileName, output] of Object.entries(bundle)) {
         if (output.type === "chunk") {

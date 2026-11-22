@@ -1,16 +1,23 @@
-import type { Component } from "solid-js"
 import type { JSX } from "@solidjs/web"
 import type { Root } from "hast"
-import type { LoadedCollections, MarkdownHeading, RenderedMarkdown } from "./content.ts"
-import { setCollections } from "./runtime.ts"
+import type { Component } from "solid-js"
+import type {
+  LoadedCollections,
+  MarkdownHeading,
+  RenderedMarkdown,
+} from "./content.ts"
 import { deferred, jsx } from "./jsx-runtime.ts"
 import { currentRenderEnvironment } from "./render-environment.ts"
 import { htmlForTree, renderTree } from "./render-tree.ts"
+import { setCollections } from "./runtime.ts"
 
 export interface PageRoute {
   /** Output-relative file name generated for the page. */
   fileName: string
-  /** Absolute public URL pathname without query or hash. Root is `/`; a custom 404 is `/404`; other routes use the configured trailing-slash policy. */
+  /**
+   * Absolute public URL pathname without query or hash. Root is `/`; a custom
+   * 404 is `/404`; other routes use the configured trailing-slash policy.
+   */
   path: string
 }
 
@@ -64,11 +71,14 @@ interface StaticSiteRoute {
   tree: Root
 }
 
-export const MarkdownContent = (props: { content: RenderedMarkdown }): JSX.Element =>
-  deferred(() => props.content.tree)
+export const MarkdownContent = (props: {
+  content: RenderedMarkdown
+}): JSX.Element => deferred(() => props.content.tree)
 
-export const Await = <T,>(props: { value: T | Promise<T>; children: (value: T) => JSX.Element }): JSX.Element =>
-  deferred(async () => props.children(await props.value))
+export const Await = <T,>(props: {
+  value: T | Promise<T>
+  children: (value: T) => JSX.Element
+}): JSX.Element => deferred(async () => props.children(await props.value))
 
 export async function renderMdxCollections(
   collections: LoadedCollections,
@@ -85,11 +95,15 @@ export async function renderMdxCollections(
       candidate => candidate.id === document.id,
     )
     if (entry === undefined) {
-      throw new TypeError(`Unknown MDX collection entry ${document.collection}/${document.id}`)
+      throw new TypeError(
+        `Unknown MDX collection entry ${document.collection}/${document.id}`,
+      )
     }
     const Content = document.Content
     const rawTree = await renderTree(jsx(Content, {}))
-    const tree = await currentRenderEnvironment()?.prepareDocument(rawTree, "") ?? rawTree
+    const tree =
+      (await currentRenderEnvironment()?.prepareDocument(rawTree, "")) ??
+      rawTree
     entry.rendered = {
       html: htmlForTree(tree),
       headings: document.headings,
@@ -157,9 +171,7 @@ const publicPathFor = (
   routePath: string,
   trailingSlash: RenderStaticSiteInput["trailingSlash"],
 ): string => {
-  const normalized = routePath
-    .replace(/[?#].*$/, "")
-    .replace(/^\/+|\/+$/g, "")
+  const normalized = routePath.replace(/[?#].*$/, "").replace(/^\/+|\/+$/g, "")
   const pathname = normalized === "" ? "/" : `/${normalized}`
 
   if (pathname === "/" || pathname === "/404" || trailingSlash === "never") {
@@ -205,25 +217,46 @@ export const renderStaticSite = async (
 ): Promise<StaticSiteRoute[]> => {
   setCollections(input.collections)
 
-  async function renderPage(fileName: string, content: JSX.Element): Promise<StaticSiteRoute> {
+  async function renderPage(
+    fileName: string,
+    content: JSX.Element,
+  ): Promise<StaticSiteRoute> {
     const rawTree = await renderTree(content)
-    const tree = await currentRenderEnvironment()?.prepareDocument(rawTree, fileName) ?? rawTree
+    const tree =
+      (await currentRenderEnvironment()?.prepareDocument(rawTree, fileName)) ??
+      rawTree
     return { fileName, tree, html: `<!doctype html>${htmlForTree(tree)}` }
   }
 
-  const documentRoutes = await Promise.all(input.documentPages.map(page => renderPage(page.fileName,
-    jsx(page.Layout, {
-      frontmatter: page.frontmatter,
-      route: { fileName: page.fileName, path: publicPathFor(page.routePath, input.trailingSlash) },
-      children: jsx(page.Content, {}),
-    }),
-  )))
-  const staticRoutes = await Promise.all(input.staticPages.map(page => renderPage(page.fileName,
-    jsx(page.Content, {
-      ...page.props,
-      route: { fileName: page.fileName, path: publicPathFor(page.routePath, input.trailingSlash) },
-    }),
-  )))
+  const documentRoutes = await Promise.all(
+    input.documentPages.map(page =>
+      renderPage(
+        page.fileName,
+        jsx(page.Layout, {
+          frontmatter: page.frontmatter,
+          route: {
+            fileName: page.fileName,
+            path: publicPathFor(page.routePath, input.trailingSlash),
+          },
+          children: jsx(page.Content, {}),
+        }),
+      ),
+    ),
+  )
+  const staticRoutes = await Promise.all(
+    input.staticPages.map(page =>
+      renderPage(
+        page.fileName,
+        jsx(page.Content, {
+          ...page.props,
+          route: {
+            fileName: page.fileName,
+            path: publicPathFor(page.routePath, input.trailingSlash),
+          },
+        }),
+      ),
+    ),
+  )
   const dynamicRoutes = (
     await Promise.all(
       input.dynamicPages.map(async page => {
@@ -236,15 +269,23 @@ export const renderStaticSite = async (
           page.pattern,
         )
 
-        return Promise.all(paths.map(path => {
-          const routePath = pathFromPattern(page.pattern, path.params)
-          const fileName = routeFileName(routePath, input.trailingSlash)
+        return Promise.all(
+          paths.map(path => {
+            const routePath = pathFromPattern(page.pattern, path.params)
+            const fileName = routeFileName(routePath, input.trailingSlash)
 
-          return renderPage(fileName, jsx(page.Content, {
-            ...path.props,
-            route: { fileName, path: publicPathFor(routePath, input.trailingSlash) },
-          }))
-        }))
+            return renderPage(
+              fileName,
+              jsx(page.Content, {
+                ...path.props,
+                route: {
+                  fileName,
+                  path: publicPathFor(routePath, input.trailingSlash),
+                },
+              }),
+            )
+          }),
+        )
       }),
     )
   ).flat()

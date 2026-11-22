@@ -136,10 +136,7 @@ export const getImage = async (
     throw new TypeError(`Unsupported getImage() format ${format}`)
   }
 
-  if (
-    rawOptions.quality !== undefined &&
-    !isImageQuality(rawOptions.quality)
-  ) {
+  if (rawOptions.quality !== undefined && !isImageQuality(rawOptions.quality)) {
     throw new TypeError("getImage() quality must be 0-100 or a quality preset")
   }
 

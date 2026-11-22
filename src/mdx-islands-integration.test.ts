@@ -13,10 +13,15 @@ describe("MDX client islands", () => {
       await mkdir(join(root, "src/pages"), { recursive: true })
       await mkdir(join(root, "src/content"), { recursive: true })
       await Promise.all([
-        writeFile(join(root, "src/layout.tsx"), `
+        writeFile(
+          join(root, "src/layout.tsx"),
+          `
 export default props => <html><head></head><body>{props.children}</body></html>
-`),
-        writeFile(join(root, "src/pages/page.mdx"), `---
+`,
+        ),
+        writeFile(
+          join(root, "src/pages/page.mdx"),
+          `---
 layout: ../layout.tsx
 ---
 import island from "../island.ts?island"
@@ -25,8 +30,11 @@ import island from "../island.ts?island"
 
 <a data-installer href="/releases/">Download</a>
 <script type="module" src={island} />
-`),
-        writeFile(join(root, "src/content/guide.mdx"), `---
+`,
+        ),
+        writeFile(
+          join(root, "src/content/guide.mdx"),
+          `---
 title: Guide
 ---
 import island from "../island.ts?island"
@@ -37,8 +45,11 @@ import island from "../island.ts?island"
 <script type="module" src={island} />
 
 ## Install
-`),
-        writeFile(join(root, "src/pages/index.tsx"), `
+`,
+        ),
+        writeFile(
+          join(root, "src/pages/index.tsx"),
+          `
 import { getCollection } from "solid-static/runtime"
 import { MarkdownContent } from "solid-static/render"
 export default () => {
@@ -48,26 +59,40 @@ export default () => {
     <article><MarkdownContent content={entry.rendered} /></article>
   </body></html>
 }
-`),
-        writeFile(join(root, "src/island.ts"), `
+`,
+        ),
+        writeFile(
+          join(root, "src/island.ts"),
+          `
 const installer = document.querySelector("[data-installer]")
 installer.setAttribute("href", "/latest-installer.dmg")
-`),
+`,
+        ),
       ])
       await build({
         root,
         logLevel: "silent",
-        plugins: [staticSite({
-          collections: { guides: { directory: "src/content", pattern: /\.mdx$/u } },
-          i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
-          integrations: [solidMarkdown()],
-          markdown: { processor: createHtmlMarkdownProcessor() },
-          trailingSlash: "always",
-        })],
+        plugins: [
+          staticSite({
+            collections: {
+              guides: { directory: "src/content", pattern: /\.mdx$/u },
+            },
+            i18n: {
+              defaultLocale: "en",
+              locales: ["en"],
+              routing: { prefixDefaultLocale: false },
+            },
+            integrations: [solidMarkdown()],
+            markdown: { processor: createHtmlMarkdownProcessor() },
+            trailingSlash: "always",
+          }),
+        ],
       })
-      const documents = await Promise.all(["index.html", "page/index.html"].map(async fileName =>
-        loadHtml(await readFile(join(root, "dist", fileName), "utf8")),
-      ))
+      const documents = await Promise.all(
+        ["index.html", "page/index.html"].map(async fileName =>
+          loadHtml(await readFile(join(root, "dist", fileName), "utf8")),
+        ),
+      )
       for (const $ of documents) {
         expect($("[data-installer]")).toHaveLength(1)
         const script = $("script[type=module]").attr("src")
@@ -75,8 +100,16 @@ installer.setAttribute("href", "/latest-installer.dmg")
         await readFile(join(root, "dist", script!.slice(1)))
       }
       const collection = documents[0]!
-      expect(collection("article h2").map((_index, element) => collection(element).attr("id")).get()).toEqual(["install", "install-1"])
-      expect(collection("nav a").map((_index, element) => collection(element).attr("href")).get()).toEqual(["#install", "#install-1"])
+      expect(
+        collection("article h2")
+          .map((_index, element) => collection(element).attr("id"))
+          .get(),
+      ).toEqual(["install", "install-1"])
+      expect(
+        collection("nav a")
+          .map((_index, element) => collection(element).attr("href"))
+          .get(),
+      ).toEqual(["#install", "#install-1"])
     } finally {
       await rm(root, { recursive: true, force: true })
     }

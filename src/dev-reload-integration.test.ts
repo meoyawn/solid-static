@@ -2,8 +2,8 @@ import { once } from "node:events"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { load } from "cheerio"
-import { describe, expect, test } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
+import { describe, expect, test } from "vitest"
 import { staticSite } from "./index.ts"
 import { createHtmlMarkdownProcessor } from "./markdown.ts"
 
@@ -24,39 +24,59 @@ describe("development reloads", () => {
       const layout = join(root, "src/layouts/document.tsx")
       const heading = join(root, "src/layouts/heading.ts")
       await Promise.all([
-        writeFile(join(root, "src/pages/about.md"), "---\nlayout: ../layouts/document.tsx\n---\n# About this site\n"),
-        writeFile(join(root, "src/pages/index.md"), "---\nlayout: ../layouts/document.tsx\n---\n# Still readable\n"),
+        writeFile(
+          join(root, "src/pages/about.md"),
+          "---\nlayout: ../layouts/document.tsx\n---\n# About this site\n",
+        ),
+        writeFile(
+          join(root, "src/pages/index.md"),
+          "---\nlayout: ../layouts/document.tsx\n---\n# Still readable\n",
+        ),
         writeFile(heading, 'export default "Before edit"'),
-        writeFile(layout, 'import heading from "./heading.ts"; export default props => <html><body><header>{heading}</header><main>{props.children}</main></body></html>'),
+        writeFile(
+          layout,
+          'import heading from "./heading.ts"; export default props => <html><body><header>{heading}</header><main>{props.children}</main></body></html>',
+        ),
       ])
       server = await createServer({
         configFile: false,
         logLevel: "silent",
         root,
         server: { host: "127.0.0.1", port: 0 },
-        plugins: [staticSite({
-          collections: {},
-          i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
-          integrations: [],
-          markdown: { processor: {
-            parse: file => processor.parse(file),
-            async run(tree, file) {
-              // Pause the later page after the about page has captured its layout.
-              if (pause && file.basename === "index.md") {
-                pause = false
-                rendering.dispatchEvent(new Event("paused"))
-                await resume.promise
-              }
-              return processor.run(tree, file)
+        plugins: [
+          staticSite({
+            collections: {},
+            i18n: {
+              defaultLocale: "en",
+              locales: ["en"],
+              routing: { prefixDefaultLocale: false },
             },
-          } },
-          trailingSlash: "always",
-        })],
+            integrations: [],
+            markdown: {
+              processor: {
+                parse: file => processor.parse(file),
+                async run(tree, file) {
+                  // Pause the later page after the about page has captured its layout.
+                  if (pause && file.basename === "index.md") {
+                    pause = false
+                    rendering.dispatchEvent(new Event("paused"))
+                    await resume.promise
+                  }
+                  return processor.run(tree, file)
+                },
+              },
+            },
+            trailingSlash: "always",
+          }),
+        ],
       })
       await server.listen()
       const origin = server.resolvedUrls?.local[0]
-      if (origin === undefined) throw new Error("Missing development server URL")
-      const initial = await fetch(origin, { signal: AbortSignal.timeout(2_000) })
+      if (origin === undefined)
+        throw new Error("Missing development server URL")
+      const initial = await fetch(origin, {
+        signal: AbortSignal.timeout(2_000),
+      })
       expect(initial.status).toEqual(200)
       expect(load(await initial.text())("header").text()).toEqual("Before edit")
 
@@ -68,13 +88,19 @@ describe("development reloads", () => {
       function nextReload(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
           const signal = AbortSignal.timeout(2_000)
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true })
-          socket!.addEventListener("message", function onMessage(event) {
-            if (JSON.parse(String(event.data)).type === "full-reload") {
-              socket!.removeEventListener("message", onMessage)
-              resolve()
-            }
-          }, { signal })
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          })
+          socket!.addEventListener(
+            "message",
+            function onMessage(event) {
+              if (JSON.parse(String(event.data)).type === "full-reload") {
+                socket!.removeEventListener("message", onMessage)
+                resolve()
+              }
+            },
+            { signal },
+          )
         })
       }
       const reload = nextReload()
@@ -83,14 +109,23 @@ describe("development reloads", () => {
       await reload
 
       pause = true
-      const paused = once(rendering, "paused", { signal: AbortSignal.timeout(2_000) })
-      pending = fetch(new URL("about/", origin), { signal: AbortSignal.timeout(3_000) })
+      const paused = once(rendering, "paused", {
+        signal: AbortSignal.timeout(2_000),
+      })
+      pending = fetch(new URL("about/", origin), {
+        signal: AbortSignal.timeout(3_000),
+      })
       void pending.catch(() => undefined)
       await paused
       const secondReload = nextReload()
-      await writeFile(layout, 'export default props => <html><body><header>Latest edit</header><main>{props.children}</main></body></html>')
+      await writeFile(
+        layout,
+        "export default props => <html><body><header>Latest edit</header><main>{props.children}</main></body></html>",
+      )
       await secondReload
-      const refreshed = await fetch(origin, { signal: AbortSignal.timeout(2_000) })
+      const refreshed = await fetch(origin, {
+        signal: AbortSignal.timeout(2_000),
+      })
       const html = await refreshed.text()
       expect(refreshed.status, html).toEqual(200)
       const page = load(html)

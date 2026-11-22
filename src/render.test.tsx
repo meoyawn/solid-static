@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest"
 import type { Component } from "solid-js"
+import { describe, expect, test } from "vitest"
 import type { PageLayoutProps } from "./render.tsx"
 import { renderStaticSite } from "./render.tsx"
 
@@ -32,7 +32,10 @@ describe("static-site renderer page routes", () => {
         ["index.html", "/|index.html"],
         ["guides/index.html", "/guides/|guides/index.html"],
         ["404.html", "/404|404.html"],
-        ["guides/example/index.html", "/guides/example/|guides/example/index.html"],
+        [
+          "guides/example/index.html",
+          "/guides/example/|guides/example/index.html",
+        ],
       ],
       trailingSlash: "always" as const,
     },
@@ -80,9 +83,7 @@ describe("static-site renderer page routes", () => {
           {
             Content: RoutePage,
             fileName:
-              trailingSlash === "always"
-                ? "guides/index.html"
-                : "guides.html",
+              trailingSlash === "always" ? "guides/index.html" : "guides.html",
             props: {},
             routePath: "guides",
           },

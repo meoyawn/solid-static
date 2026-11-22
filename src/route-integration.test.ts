@@ -5,13 +5,10 @@ import {
 } from "node:http"
 import { join } from "node:path"
 import { load as loadHtml } from "cheerio"
-import { describe, expect, test } from "vitest"
 import { build, createServer as createViteServer } from "vite"
+import { describe, expect, test } from "vitest"
 import { staticSite } from "./index.ts"
-import {
-  createHtmlMarkdownProcessor,
-  solidMarkdown,
-} from "./markdown.ts"
+import { createHtmlMarkdownProcessor, solidMarkdown } from "./markdown.ts"
 
 describe("PageRoute Vite rendering", () => {
   test.each(["always", "never"] as const)(
@@ -187,10 +184,7 @@ export default (props: {
                 ["index.html", "/|index.html"],
                 ["guides.html", "/guides|guides.html"],
                 ["reference.html", "/reference|reference.html"],
-                [
-                  "guides/example.html",
-                  "/guides/example|guides/example.html",
-                ],
+                ["guides/example.html", "/guides/example|guides/example.html"],
                 ["404.html", "/404|404.html"],
               ]
         const productionRoutes = await Promise.all(
@@ -205,25 +199,26 @@ export default (props: {
           }),
         )
         const referenceFileName =
-          trailingSlash === "always"
-            ? "reference/index.html"
-            : "reference.html"
+          trailingSlash === "always" ? "reference/index.html" : "reference.html"
         const referenceHtml = await readFile(
           join(root, "dist", referenceFileName),
           "utf8",
         )
 
         expect(productionRoutes).toEqual(expected)
-        expect(referenceHtml).toMatch(
-          /<h1[^>]*>SSR-safe Markdown<\/h1>/,
-        )
+        expect(referenceHtml).toMatch(/<h1[^>]*>SSR-safe Markdown<\/h1>/)
         expect(referenceHtml).toMatch(
           /<p[^>]*>Rendered in <strong[^>]*>Node production SSR<\/strong>\.<\/p>/,
         )
-        const markdown = await readFile(join(root, "dist", referenceFileName.replace(/\.html$/, ".md")), "utf8")
+        const markdown = await readFile(
+          join(root, "dist", referenceFileName.replace(/\.html$/, ".md")),
+          "utf8",
+        )
         expect(markdown).toContain("# SSR-safe Markdown")
         expect(markdown).toContain("**Node production SSR**")
-        await expect(readFile(join(root, "dist", "404.md"))).rejects.toMatchObject({ code: "ENOENT" })
+        await expect(
+          readFile(join(root, "dist", "404.md")),
+        ).rejects.toMatchObject({ code: "ENOENT" })
 
         const viteServer = await createViteServer({
           appType: "spa",

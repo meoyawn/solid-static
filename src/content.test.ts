@@ -9,7 +9,10 @@ describe("content collections", () => {
   test("carries rendered heading anchors into collection entries", async () => {
     const directory = await mkdtemp(join(tmpdir(), "solid-static-headings-"))
     try {
-      await writeFile(join(directory, "guide.md"), "---\ntitle: Guide\n---\n## Listen\n### Share\n")
+      await writeFile(
+        join(directory, "guide.md"),
+        "---\ntitle: Guide\n---\n## Listen\n### Share\n",
+      )
       const collections = await loadCollections(
         { guides: { directory, pattern: /\.md$/u } },
         createHtmlMarkdownProcessor(),

@@ -1,10 +1,22 @@
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises"
+import { join, posix } from "node:path"
 import { parse as parseJavaScript } from "acorn"
 import { load as loadHtml } from "cheerio"
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
-import { join, posix } from "node:path"
 import { parse as parseCss } from "postcss"
+import {
+  build,
+  createServer as createViteServer,
+  type Plugin,
+  type UserConfig,
+} from "vite"
 import { describe, expect, test } from "vitest"
-import { build, createServer as createViteServer, type Plugin, type UserConfig } from "vite"
 import { staticSite } from "./index.ts"
 import { createHtmlMarkdownProcessor } from "./markdown.ts"
 
@@ -119,8 +131,14 @@ render(() => <Counter />, root)
 function templatePoster(html: string): string {
   const page = loadHtml(html)
   const template = loadHtml(page("#player-template").html() ?? "", null, false)
-  expect(template("iframe").attr("src")).toEqual("https://video.example/embed/introduction")
-  const nested = loadHtml(template("#nested-template").html() ?? "", null, false)
+  expect(template("iframe").attr("src")).toEqual(
+    "https://video.example/embed/introduction",
+  )
+  const nested = loadHtml(
+    template("#nested-template").html() ?? "",
+    null,
+    false,
+  )
   expect(nested("p").text()).toEqual("Nested content")
   const poster = template("img").attr("src")
   if (poster === undefined) throw new Error("Missing template poster")
@@ -235,7 +253,6 @@ const matrixClientConfig = (root: string): UserConfig => ({
   resolve: { alias: { "@client": join(root, "src", "client") } },
 })
 
-
 // Resolve a generated public asset URL exactly as its containing HTML page does.
 function outputAsset(url: string, route: string, base: string): string {
   const root = new URL(base, "http://solid-static.test/")
@@ -249,103 +266,157 @@ async function assertJavaScriptFiles(directory: string): Promise<void> {
   const files = await readdir(directory, { recursive: true })
   const scripts = files.filter(file => file.endsWith(".js"))
   expect(scripts.length).toBeGreaterThan(0)
-  await Promise.all(scripts.map(async file => {
-    const source = await readFile(join(directory, file), "utf8")
-    const program = parseJavaScript(source, { ecmaVersion: "latest", sourceType: "module" })
-    expect(program.body.length).toBeGreaterThan(0)
-    expect(source).not.toContain("__SOLID_STATIC_ISLAND_")
-    for (const statement of program.body) {
-      if (statement.type !== "ImportDeclaration") continue
-      const imported = statement.source.value
-      if (typeof imported !== "string") throw new TypeError("Expected a module URL")
-      expect(imported.startsWith(".")).toEqual(true)
-      expect(files).toContain(posix.normalize(posix.join(posix.dirname(file), imported)))
-    }
-  }))
+  await Promise.all(
+    scripts.map(async file => {
+      const source = await readFile(join(directory, file), "utf8")
+      const program = parseJavaScript(source, {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      })
+      expect(program.body.length).toBeGreaterThan(0)
+      expect(source).not.toContain("__SOLID_STATIC_ISLAND_")
+      for (const statement of program.body) {
+        if (statement.type !== "ImportDeclaration") continue
+        const imported = statement.source.value
+        if (typeof imported !== "string")
+          throw new TypeError("Expected a module URL")
+        expect(imported.startsWith(".")).toEqual(true)
+        expect(files).toContain(
+          posix.normalize(posix.join(posix.dirname(file), imported)),
+        )
+      }
+    }),
+  )
 }
 
 function cssRules(source: string): Record<string, Record<string, string>> {
   const rules: Record<string, Record<string, string>> = {}
   parseCss(source).walkRules(rule => {
     const declarations: Record<string, string> = {}
-    rule.walkDecls(declaration => { declarations[declaration.prop] = declaration.value })
+    rule.walkDecls(declaration => {
+      declarations[declaration.prop] = declaration.value
+    })
     rules[rule.selector] = declarations
   })
   return rules
 }
 
 describe("client island output", () => {
-  test.concurrent.each(clientBaseCases)("maps emitted assets with $name base", async ({ base }) => {
-    expect(typeof document).toEqual("undefined")
-    const root = await createMatrixFixture()
-    const outputDirectory = join(root, "dist")
-    try {
-      await build({
-        base,
-        build: { minify: false, outDir: outputDirectory },
-        logLevel: "silent",
-        plugins: [staticSitePlugins(matrixClientConfig(root))],
-        root,
-      })
-      const outputFiles = await readdir(outputDirectory, { recursive: true })
-      const styles: string[] = []
-      const entries: string[] = []
-      await Promise.all([
-        { route: "index.html", name: "alpha", prefix: base, color: "rgb(11, 12, 13)" },
-        { route: "beta/index.html", name: "beta", prefix: base === "./" ? "../" : base, color: "rgb(21, 22, 23)" },
-      ].map(async ({ route, name, prefix, color }) => {
-        const html = await readFile(join(outputDirectory, route), "utf8")
-        const $ = loadHtml(html)
-        expect($("title").text().toLowerCase()).toEqual(name)
-        expect($("#" + name).text()).toEqual(name === "alpha" ? "Alpha fallback" : "Beta fallback")
-        expect($("script[type=module][src]")).toHaveLength(1)
-        expect($("link[rel=stylesheet][href]")).toHaveLength(1)
-        expect(html).not.toContain("__SOLID_STATIC_ISLAND_")
-        const script = $("script[type=module]").attr("src")
-        const stylesheet = $("link[rel=stylesheet]").attr("href")
-        if (script === undefined || stylesheet === undefined) throw new Error("Missing island assets")
-        expect(script.startsWith(prefix + "assets/islands/")).toEqual(true)
-        expect(stylesheet.startsWith(prefix + "assets/islands/")).toEqual(true)
-        const scriptFile = outputAsset(script, route, base)
-        const styleFile = outputAsset(stylesheet, route, base)
-        expect(outputFiles).toContain(scriptFile)
-        expect(outputFiles).toContain(styleFile)
-        entries.push(scriptFile)
-        styles.push(styleFile)
-        const rules = cssRules(await readFile(join(outputDirectory, styleFile), "utf8"))
-        expect(rules).toEqual({ [".client_" + name]: { color } })
-        const image = $("img")
-        const candidates = [image.attr("src"), ...String(image.attr("srcset")).split(", ").map(candidate => candidate.split(" ")[0])]
-        for (const candidate of candidates) {
-          if (candidate === undefined) throw new Error("Missing image variant")
-          expect(candidate.startsWith(prefix + "assets/")).toEqual(true)
-          expect(outputFiles).toContain(outputAsset(candidate, route, base))
-        }
-        const javascript = await readFile(join(outputDirectory, scriptFile), "utf8")
-        parseJavaScript(javascript, { ecmaVersion: 2020, sourceType: "module" })
-        expect(javascript).toContain("client_" + name)
-        expect(javascript).toContain("\n")
-      }))
-      expect(new Set(styles).size).toEqual(2)
-      expect(new Set(entries).size).toEqual(2)
-      const sharedFiles = outputFiles.filter(file => file.includes("/chunks/") && file.endsWith(".js"))
-      expect(sharedFiles).toHaveLength(1)
-      const sharedFile = sharedFiles[0]
-      if (sharedFile === undefined) throw new Error("Missing shared module")
-      const sharedJavaScript = await readFile(join(outputDirectory, sharedFile), "utf8")
-      expect(sharedJavaScript).toContain('"defined"')
-      expect(sharedJavaScript).toContain('"transformed"')
-      expect(sharedJavaScript).toContain('"client-fixture"')
-      expect(sharedJavaScript).not.toContain("__CLIENT_TRANSFORM__")
-      const plain = loadHtml(await readFile(join(outputDirectory, "plain/index.html"), "utf8"))
-      expect(plain("body").text()).toEqual("No islands here")
-      expect(plain("script, link[rel=stylesheet]")).toHaveLength(0)
-      expect(outputFiles).not.toContain(".vite/solid-static-islands-manifest.json")
-      await assertJavaScriptFiles(outputDirectory)
-    } finally {
-      await rm(root, { force: true, recursive: true })
-    }
-  }, 30_000)
+  test.concurrent.each(clientBaseCases)(
+    "maps emitted assets with $name base",
+    async ({ base }) => {
+      expect(typeof document).toEqual("undefined")
+      const root = await createMatrixFixture()
+      const outputDirectory = join(root, "dist")
+      try {
+        await build({
+          base,
+          build: { minify: false, outDir: outputDirectory },
+          logLevel: "silent",
+          plugins: [staticSitePlugins(matrixClientConfig(root))],
+          root,
+        })
+        const outputFiles = await readdir(outputDirectory, { recursive: true })
+        const styles: string[] = []
+        const entries: string[] = []
+        await Promise.all(
+          [
+            {
+              route: "index.html",
+              name: "alpha",
+              prefix: base,
+              color: "rgb(11, 12, 13)",
+            },
+            {
+              route: "beta/index.html",
+              name: "beta",
+              prefix: base === "./" ? "../" : base,
+              color: "rgb(21, 22, 23)",
+            },
+          ].map(async ({ route, name, prefix, color }) => {
+            const html = await readFile(join(outputDirectory, route), "utf8")
+            const $ = loadHtml(html)
+            expect($("title").text().toLowerCase()).toEqual(name)
+            expect($("#" + name).text()).toEqual(
+              name === "alpha" ? "Alpha fallback" : "Beta fallback",
+            )
+            expect($("script[type=module][src]")).toHaveLength(1)
+            expect($("link[rel=stylesheet][href]")).toHaveLength(1)
+            expect(html).not.toContain("__SOLID_STATIC_ISLAND_")
+            const script = $("script[type=module]").attr("src")
+            const stylesheet = $("link[rel=stylesheet]").attr("href")
+            if (script === undefined || stylesheet === undefined)
+              throw new Error("Missing island assets")
+            expect(script.startsWith(prefix + "assets/islands/")).toEqual(true)
+            expect(stylesheet.startsWith(prefix + "assets/islands/")).toEqual(
+              true,
+            )
+            const scriptFile = outputAsset(script, route, base)
+            const styleFile = outputAsset(stylesheet, route, base)
+            expect(outputFiles).toContain(scriptFile)
+            expect(outputFiles).toContain(styleFile)
+            entries.push(scriptFile)
+            styles.push(styleFile)
+            const rules = cssRules(
+              await readFile(join(outputDirectory, styleFile), "utf8"),
+            )
+            expect(rules).toEqual({ [".client_" + name]: { color } })
+            const image = $("img")
+            const candidates = [
+              image.attr("src"),
+              ...String(image.attr("srcset"))
+                .split(", ")
+                .map(candidate => candidate.split(" ")[0]),
+            ]
+            for (const candidate of candidates) {
+              if (candidate === undefined)
+                throw new Error("Missing image variant")
+              expect(candidate.startsWith(prefix + "assets/")).toEqual(true)
+              expect(outputFiles).toContain(outputAsset(candidate, route, base))
+            }
+            const javascript = await readFile(
+              join(outputDirectory, scriptFile),
+              "utf8",
+            )
+            parseJavaScript(javascript, {
+              ecmaVersion: 2020,
+              sourceType: "module",
+            })
+            expect(javascript).toContain("client_" + name)
+            expect(javascript).toContain("\n")
+          }),
+        )
+        expect(new Set(styles).size).toEqual(2)
+        expect(new Set(entries).size).toEqual(2)
+        const sharedFiles = outputFiles.filter(
+          file => file.includes("/chunks/") && file.endsWith(".js"),
+        )
+        expect(sharedFiles).toHaveLength(1)
+        const sharedFile = sharedFiles[0]
+        if (sharedFile === undefined) throw new Error("Missing shared module")
+        const sharedJavaScript = await readFile(
+          join(outputDirectory, sharedFile),
+          "utf8",
+        )
+        expect(sharedJavaScript).toContain('"defined"')
+        expect(sharedJavaScript).toContain('"transformed"')
+        expect(sharedJavaScript).toContain('"client-fixture"')
+        expect(sharedJavaScript).not.toContain("__CLIENT_TRANSFORM__")
+        const plain = loadHtml(
+          await readFile(join(outputDirectory, "plain/index.html"), "utf8"),
+        )
+        expect(plain("body").text()).toEqual("No islands here")
+        expect(plain("script, link[rel=stylesheet]")).toHaveLength(0)
+        expect(outputFiles).not.toContain(
+          ".vite/solid-static-islands-manifest.json",
+        )
+        await assertJavaScriptFiles(outputDirectory)
+      } finally {
+        await rm(root, { force: true, recursive: true })
+      }
+    },
+    30_000,
+  )
 
   test("emits static fallback HTML with hashed JavaScript and deduplicated CSS links", async () => {
     const root = await createFixture()
@@ -359,24 +430,52 @@ describe("client island output", () => {
       })
       const html = await readFile(join(outputDirectory, "index.html"), "utf8")
       const $ = loadHtml(html)
-      await readFile(join(outputDirectory, outputAsset(templatePoster(html), "index.html", "/")))
+      await readFile(
+        join(
+          outputDirectory,
+          outputAsset(templatePoster(html), "index.html", "/"),
+        ),
+      )
       expect($("#fallback").text()).toEqual("Static fallback")
       expect($("#counter").text()).toEqual("Loading client island")
       expect($("button")).toHaveLength(0)
       expect(html).not.toContain("__SOLID_STATIC_ISLAND_")
-      const scripts = $("script[type=module][src]").map((_index, element) => $(element).attr("src")).get()
-      const styles = $("link[rel=stylesheet][href]").map((_index, element) => $(element).attr("href")).get()
+      const scripts = $("script[type=module][src]")
+        .map((_index, element) => $(element).attr("src"))
+        .get()
+      const styles = $("link[rel=stylesheet][href]")
+        .map((_index, element) => $(element).attr("href"))
+        .get()
       expect(scripts).toHaveLength(1)
       expect(scripts[0]).toMatch(/^\/assets\/islands\/[a-f0-9]+-[^/]+\.js$/)
       expect(styles).toHaveLength(2)
-      expect(styles.filter(style => /^\/assets\/page-[^/]+\.css$/.test(style))).toHaveLength(1)
-      expect(styles.filter(style => /^\/assets\/islands\/[^/]+\.css$/.test(style))).toHaveLength(1)
-      const rules = Object.assign({}, ...await Promise.all(styles.map(async style =>
-        cssRules(await readFile(join(outputDirectory, outputAsset(style, "index.html", "/")), "utf8")),
-      )))
+      expect(
+        styles.filter(style => /^\/assets\/page-[^/]+\.css$/.test(style)),
+      ).toHaveLength(1)
+      expect(
+        styles.filter(style => /^\/assets\/islands\/[^/]+\.css$/.test(style)),
+      ).toHaveLength(1)
+      const rules = Object.assign(
+        {},
+        ...(await Promise.all(
+          styles.map(async style =>
+            cssRules(
+              await readFile(
+                join(outputDirectory, outputAsset(style, "index.html", "/")),
+                "utf8",
+              ),
+            ),
+          ),
+        )),
+      )
       expect(rules["body"]).toEqual({ margin: "0" })
-      expect(rules["#counter button"]?.["color"]).toMatch(/^(?:#010203|rgb\(1,\s*2,\s*3\))$/)
-      for (const script of scripts) await readFile(join(outputDirectory, outputAsset(script, "index.html", "/")))
+      expect(rules["#counter button"]?.["color"]).toMatch(
+        /^(?:#010203|rgb\(1,\s*2,\s*3\))$/,
+      )
+      for (const script of scripts)
+        await readFile(
+          join(outputDirectory, outputAsset(script, "index.html", "/")),
+        )
       await assertJavaScriptFiles(outputDirectory)
     } finally {
       await rm(root, { force: true, recursive: true })
@@ -386,7 +485,10 @@ describe("client island output", () => {
   test("serves fallback HTML and transformed island assets during development", async () => {
     const root = await createFixture()
     const page = join(root, "src/pages/index.tsx")
-    await writeFile(page, `import "../global.css"\n${await readFile(page, "utf8")}`)
+    await writeFile(
+      page,
+      `import "../global.css"\n${await readFile(page, "utf8")}`,
+    )
     await writeFile(join(root, "src/global.css"), ".fixture { display: grid; }")
     const server = await createViteServer({
       appType: "spa",
@@ -399,35 +501,58 @@ describe("client island output", () => {
       await server.listen()
       const origin = server.resolvedUrls?.local[0]
       if (origin === undefined) throw new Error("Missing Vite development URL")
-      const response = await fetch(origin, { headers: { accept: "text/html" }, signal: AbortSignal.timeout(5_000) })
+      const response = await fetch(origin, {
+        headers: { accept: "text/html" },
+        signal: AbortSignal.timeout(5_000),
+      })
       expect(response.status).toEqual(200)
       const html = await response.text()
       const $ = loadHtml(html)
-      const poster = await fetch(new URL(templatePoster(html), origin), { signal: AbortSignal.timeout(5_000) })
+      const poster = await fetch(new URL(templatePoster(html), origin), {
+        signal: AbortSignal.timeout(5_000),
+      })
       expect(poster.status).toEqual(200)
       expect(poster.headers.get("content-type")).toContain("image/svg+xml")
       expect($("#fallback").text()).toEqual("Static fallback")
       expect($("#counter").text()).toEqual("Loading client island")
-      const stylesheet = $("link[rel=stylesheet]").map((_index, element) => $(element).attr("href")).get().find(href => href.endsWith("global.css"))
-      if (stylesheet === undefined) throw new Error("Missing server-imported stylesheet")
+      const stylesheet = $("link[rel=stylesheet]")
+        .map((_index, element) => $(element).attr("href"))
+        .get()
+        .find(href => href.endsWith("global.css"))
+      if (stylesheet === undefined)
+        throw new Error("Missing server-imported stylesheet")
       const stylesheetUrl = new URL(stylesheet, origin)
       expect(stylesheetUrl.origin).toEqual(new URL(origin).origin)
-      const globalCss = await fetch(stylesheetUrl, { headers: { accept: "text/css" }, signal: AbortSignal.timeout(5_000) })
+      const globalCss = await fetch(stylesheetUrl, {
+        headers: { accept: "text/css" },
+        signal: AbortSignal.timeout(5_000),
+      })
       expect(globalCss.status).toEqual(200)
       expect(globalCss.headers.get("content-type")).toContain("text/css")
-      expect(cssRules(await globalCss.text())).toEqual({ ".fixture": { display: "grid" } })
+      expect(cssRules(await globalCss.text())).toEqual({
+        ".fixture": { display: "grid" },
+      })
       const island = $("script[type=module][src='/src/counter-island.tsx']")
       expect(island).toHaveLength(1)
-      const module = await fetch(new URL("/src/counter-island.tsx", origin), { signal: AbortSignal.timeout(5_000) })
+      const module = await fetch(new URL("/src/counter-island.tsx", origin), {
+        signal: AbortSignal.timeout(5_000),
+      })
       expect(module.status).toEqual(200)
       expect(module.headers.get("content-type")).toContain("javascript")
       const javascript = await module.text()
-      parseJavaScript(javascript, { ecmaVersion: "latest", sourceType: "module" })
+      parseJavaScript(javascript, {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      })
       expect(javascript).toContain("#counter")
       expect(javascript).toContain("Count ")
-      const css = await fetch(new URL("/src/counter.css?direct", origin), { signal: AbortSignal.timeout(5_000) })
+      const css = await fetch(new URL("/src/counter.css?direct", origin), {
+        signal: AbortSignal.timeout(5_000),
+      })
       expect(css.status).toEqual(200)
-      expect(cssRules(await css.text())).toEqual({ "#counter button": { color: "rgb(1, 2, 3)" } })
+      expect(cssRules(await css.text())).toEqual({
+        "#counter button": { color: "rgb(1, 2, 3)" },
+      })
     } finally {
       await server.close()
       await rm(root, { force: true, recursive: true })

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { isAbsolute, relative } from "node:path"
 import { fileURLToPath } from "node:url"
+import solid from "@solidjs/vite-plugin"
 import {
   build,
   normalizePath,
@@ -9,7 +10,6 @@ import {
   type ResolvedConfig,
   type UserConfig,
 } from "vite"
-import solid from "@solidjs/vite-plugin"
 
 interface RegisteredIsland {
   entryPath: string
@@ -72,7 +72,8 @@ const requireClientOutputs = (
 
       if (
         output.type === "asset" &&
-        (typeof output.source === "string" || output.source instanceof Uint8Array)
+        (typeof output.source === "string" ||
+          output.source instanceof Uint8Array)
       ) {
         outputs.push({
           fileName: output.fileName,
@@ -173,10 +174,7 @@ const manifestStyleFiles = (
   return [...styleFiles].sort()
 }
 
-const developmentModuleUrl = (
-  entryPath: string,
-  root: string,
-): string => {
+const developmentModuleUrl = (entryPath: string, root: string): string => {
   const relativePath = relative(root, entryPath)
 
   if (!isAbsolute(relativePath) && !relativePath.startsWith("..")) {
@@ -186,7 +184,9 @@ const developmentModuleUrl = (
   return `/@fs/${normalizePath(entryPath)}`
 }
 
-export const createClientIslands = (clientConfig: UserConfig = {}): ClientIslands => {
+export const createClientIslands = (
+  clientConfig: UserConfig = {},
+): ClientIslands => {
   const entries = new Map<string, RegisteredIsland>()
   let configuredBase: string | undefined
   let clientMinify: ResolvedConfig["build"]["minify"] = "oxc"
@@ -215,7 +215,10 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
       }
 
       const entryPath = resolved.id.replace(/\?.*$/, "")
-      const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 12)
+      const key = createHash("sha256")
+        .update(entryPath)
+        .digest("hex")
+        .slice(0, 12)
       const existing = entries.get(key)
 
       if (existing !== undefined && existing.entryPath !== entryPath) {
@@ -240,7 +243,14 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
       if (config.command === "serve") {
         return `export default ${JSON.stringify(developmentModuleUrl(island.entryPath, config.root))}`
       }
-      const environmentPath = fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "./render-environment.ts" : "./render-environment.js", import.meta.url))
+      const environmentPath = fileURLToPath(
+        new URL(
+          import.meta.url.endsWith(".ts")
+            ? "./render-environment.ts"
+            : "./render-environment.js",
+          import.meta.url,
+        ),
+      )
       return `import { renderEnvironment } from ${JSON.stringify(environmentPath)}\nexport default renderEnvironment().islandUrl(${JSON.stringify(key)})`
     },
   }
@@ -251,7 +261,8 @@ export const createClientIslands = (clientConfig: UserConfig = {}): ClientIsland
     }
 
     const resolvedConfig = config
-    const clientBase = clientConfig.base ?? configuredBase ?? resolvedConfig.base
+    const clientBase =
+      clientConfig.base ?? configuredBase ?? resolvedConfig.base
 
     if (entries.size === 0) {
       return {

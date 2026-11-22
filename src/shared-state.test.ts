@@ -6,8 +6,8 @@ type RuntimeModule = typeof import("./runtime.ts")
 
 /**
  * A dependency reinstall can leave the Vite plugin on one installed copy of
- * solid-static while pages re-import another, so each copy is a separate
- * module instance.
+ * solid-static while pages re-import another, so each copy is a separate module
+ * instance.
  */
 const separateCopy = <T>(path: string): Promise<T> =>
   import(/* @vite-ignore */ `${path}?copy=${crypto.randomUUID()}`)
@@ -28,12 +28,17 @@ const environment: RenderEnvironment = {
 
 describe("state shared across installed copies", () => {
   test("pages see the render environment the plugin's copy entered", async () => {
-    const plugin = await separateCopy<RenderEnvironmentModule>("./render-environment.ts")
-    const page = await separateCopy<RenderEnvironmentModule>("./render-environment.ts")
+    const plugin = await separateCopy<RenderEnvironmentModule>(
+      "./render-environment.ts",
+    )
+    const page = await separateCopy<RenderEnvironmentModule>(
+      "./render-environment.ts",
+    )
 
     expect(page).not.toBe(plugin)
-    expect(plugin.withRenderEnvironment(environment, () => page.renderEnvironment()))
-      .toBe(environment)
+    expect(
+      plugin.withRenderEnvironment(environment, () => page.renderEnvironment()),
+    ).toBe(environment)
   })
 
   test("pages see collections the plugin's copy loaded", async () => {

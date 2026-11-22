@@ -1,4 +1,3 @@
-import { describe, expect, test } from "vitest"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import {
   createServer as createHttpServer,
@@ -7,6 +6,7 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createServer as createViteServer } from "vite"
+import { describe, expect, test } from "vitest"
 import { createSitemap, staticSite } from "./index.ts"
 import { createHtmlMarkdownProcessor } from "./markdown.ts"
 
@@ -45,9 +45,9 @@ describe("sitemap generation", () => {
       [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        '  <url><loc>https://example.com/</loc><lastmod>2026-08-22</lastmod></url>',
-        '  <url><loc>https://example.com/about/</loc><lastmod>2026-08-22</lastmod></url>',
-        '  <url><loc>https://example.com/writing/example/</loc><lastmod>2026-08-22</lastmod></url>',
+        "  <url><loc>https://example.com/</loc><lastmod>2026-08-22</lastmod></url>",
+        "  <url><loc>https://example.com/about/</loc><lastmod>2026-08-22</lastmod></url>",
+        "  <url><loc>https://example.com/writing/example/</loc><lastmod>2026-08-22</lastmod></url>",
         "</urlset>",
         "",
       ].join("\n"),
@@ -118,7 +118,9 @@ describe("vite static-site development server", () => {
 
           request.once("error", reject)
           request.setTimeout(2_000, () => {
-            request.destroy(new Error("Timed out requesting invalid frontmatter"))
+            request.destroy(
+              new Error("Timed out requesting invalid frontmatter"),
+            )
           })
           request.end()
         })

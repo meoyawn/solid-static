@@ -39,7 +39,9 @@ interface ResolvedImageTransform {
   width: number
 }
 
-const qualityValue = (quality: ImageQuality | undefined): number | undefined => {
+const qualityValue = (
+  quality: ImageQuality | undefined,
+): number | undefined => {
   if (typeof quality === "number" || quality === undefined) {
     return quality
   }
@@ -99,7 +101,10 @@ export const createImagePipeline = async (
   }
 
   const baseName = basename(sourceName, extname(sourceName))
-  const sourceHash = createHash("sha256").update(source).digest("hex").slice(0, 8)
+  const sourceHash = createHash("sha256")
+    .update(source)
+    .digest("hex")
+    .slice(0, 8)
   const transforms = new Map<string, Promise<TransformedImage>>()
 
   function transform(
@@ -123,13 +128,21 @@ export const createImagePipeline = async (
       let content: Buffer
 
       if (resolved.format === "avif") {
-        content = await transformer.avif({ quality: resolved.quality }).toBuffer()
+        content = await transformer
+          .avif({ quality: resolved.quality })
+          .toBuffer()
       } else if (resolved.format === "jpg") {
-        content = await transformer.jpeg({ quality: resolved.quality }).toBuffer()
+        content = await transformer
+          .jpeg({ quality: resolved.quality })
+          .toBuffer()
       } else if (resolved.format === "png") {
-        content = await transformer.png({ quality: resolved.quality }).toBuffer()
+        content = await transformer
+          .png({ quality: resolved.quality })
+          .toBuffer()
       } else {
-        content = await transformer.webp({ quality: resolved.quality }).toBuffer()
+        content = await transformer
+          .webp({ quality: resolved.quality })
+          .toBuffer()
       }
 
       const transformHash = createHash("sha256")
